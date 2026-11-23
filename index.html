@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tire sensor explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EBEE; --surface:#F7F8F9; --ink:#1E2226; --muted:#5B636B; --line:#C9CED4;
+  --accent:#F2B705; --accent-ink:#1E2226; --warn:#B3261E; --ok:#2E7D4F; --chg-bg:#F2B705; --chg-ink:#1E2226;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#16191C; --surface:#202429; --ink:#E6E8EA; --muted:#9AA3AC; --line:#343A41;
+    --accent:#F2B705; --accent-ink:#16191C; --warn:#FF8A80; --ok:#6FCF97; --chg-bg:#F2B705; --chg-ink:#16191C;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+h1{font:600 2.6rem/1 "Barlow Condensed","Arial Narrow",sans-serif;margin:8px 0 6px;letter-spacing:-.01em}
+h2{font:600 1.5rem/1.2 "Barlow Condensed","Arial Narrow",sans-serif;margin:32px 0 6px}
+p{margin:0 0 12px;max-width:62ch}
+.muted{color:var(--muted)}
+.mono,code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+#support{border-left:4px solid var(--accent);padding:8px 12px;background:var(--surface);margin:12px 0}
+#support.bad{border-color:var(--warn)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-top:16px}
+summary{font-weight:600;cursor:pointer}
+ol{padding-left:20px;margin:10px 0}
+li{margin:4px 0}
+label{display:block;font-weight:500;margin:14px 0 4px}
+input,textarea{width:100%;font:15px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px}
+textarea{min-height:84px;resize:vertical}
+.hint{font-size:.9rem;color:var(--muted);margin-top:4px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px 0;margin-top:16px;border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+#devname{font-weight:600;margin-bottom:8px;min-height:1.5em}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:500 15px/1 Barlow,system-ui,sans-serif;min-height:44px;padding:0 16px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.empty{color:var(--muted);border:1px dashed var(--line);border-radius:6px;padding:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:10px 0}
+.card h3{font-size:1rem;margin:0 0 4px;font-weight:600;word-break:break-all}
+.meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.9rem;color:var(--muted);margin-bottom:8px}
+.hex{display:flex;flex-wrap:wrap;gap:3px;font:15px/1 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto}
+.hex span{display:inline-block;padding:5px 3px;border-radius:3px;min-width:1.9em;text-align:center;position:relative}
+.hex span::after{content:attr(data-i);position:absolute;left:0;right:0;top:100%;font-size:9px;color:var(--muted);padding-top:2px}
+.hex{padding-bottom:14px}
+.hex span.chg{background:var(--chg-bg);color:var(--chg-ink);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.hex span.chg{animation:pulse .9s ease-out}}
+@keyframes pulse{from{transform:translateY(-2px)}to{transform:none}}
+.svc{margin:10px 0}
+.chr{border-top:1px solid var(--line);padding:10px 0}
+.chr:first-of-type{border-top:0}
+.chr .uuid{font-size:.85rem;word-break:break-all}
+.props{font-size:.85rem;color:var(--muted)}
+.val{margin-top:6px;font-size:.9rem;word-break:break-all}
+.val b{font-weight:600}
+.reading{font:600 1.9rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:4px 0 6px}
+pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12.5px;line-height:1.45;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0 0}
+.err{color:var(--warn)}
+.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Tire sensor explorer</h1>
+  <p class="muted">Watch and read the Bluetooth tire pressure sensors in a Tesla from Chrome on Android. Read-only: this page never writes to a sensor.</p>
+  <div id="support"></div>
+
+  <details id="setup" open>
+    <summary>Before you scan</summary>
+    <ol>
+      <li>Stand next to one wheel. The four sensors look identical in Chrome’s picker, so signal strength is how you tell them apart.</li>
+      <li>Pick one sensor. Its broadcasts only say “I’m here” (Tesla company ID 0x022B, payload 01 FE 03 while parked); the measurements are read over a connection, like the car does.</li>
+      <li>Connect, then tap Subscribe on “Tesla tyre data”. The sensor sends pressure and temperature straight away, then a heartbeat every four minutes while it stands still. It accepts one connection at a time, so this only works while the car isn’t connected to it, and the car can’t hear it until you disconnect.</li>
+      <li>Battery level isn’t available: the sensor doesn’t include it in its data, and it ignores requests from anything but its paired car.</li>
+    </ol>
+    <label for="prefix">Name starts with (optional)</label>
+    <input id="prefix" autocomplete="off" spellcheck="false" placeholder="Leave empty to list every device">
+    <label for="services">Services to allow</label>
+    <textarea id="services" spellcheck="false"></textarea>
+    <div class="hint">One per line: a 16-bit ID like 0x180F, a full 128-bit UUID, or a name like battery_service.</div>
+    <label for="companies">Manufacturer company IDs to allow</label>
+    <input id="companies" autocomplete="off" spellcheck="false" placeholder="0x022B is Tesla, Inc.">
+    <div class="hint">Without this, Chrome hides manufacturer data in broadcasts.</div>
+  </details>
+
+  <div class="bar">
+    <div id="devname" class="muted">No sensor picked</div>
+    <div class="btns">
+      <button id="pick" class="primary">Pick sensor</button>
+      <button id="watch" disabled>Watch broadcasts</button>
+      <button id="connect" disabled>Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+    </div>
+  </div>
+
+  <h2>Broadcasts</h2>
+  <p class="muted">Latest packet per data block. Highlighted bytes changed since the previous packet; the small numbers are byte offsets. Tesla sensors are expected to send presence frames only, so use this to confirm you picked a sensor.</p>
+  <div id="adv"><div class="empty">Pick a sensor and start watching. Driving a short distance first can wake sensors that are asleep.</div></div>
+
+  <h2>Services</h2>
+  <div id="gatt"><div class="empty">Connect to list the sensor’s services and characteristics.</div></div>
+
+  <h2>Log</h2>
+  <div class="btns">
+    <button id="copy">Copy log</button>
+    <button id="download">Download log</button>
+    <button id="clear">Clear log</button>
+  </div>
+  <pre id="log"></pre>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const TESLA_SVC = "00000211-b2d1-43f0-9b88-960cebf8b91e";
+  const TESLA_IND = "00000213-b2d1-43f0-9b88-960cebf8b91e";
+  const DEFAULT_SERVICES = TESLA_SVC + "\nbattery_service\ndevice_information";
+  const NAMES = {
+    "00000211-b2d1-43f0-9b88-960cebf8b91e":"Tesla sensor service",
+    "00000213-b2d1-43f0-9b88-960cebf8b91e":"Tesla tyre data",
+    "0000180f-0000-1000-8000-00805f9b34fb":"Battery service",
+    "00002a19-0000-1000-8000-00805f9b34fb":"Battery level",
+    "0000180a-0000-1000-8000-00805f9b34fb":"Device information",
+    "00002a29-0000-1000-8000-00805f9b34fb":"Manufacturer name",
+    "00002a24-0000-1000-8000-00805f9b34fb":"Model number",
+    "00002a25-0000-1000-8000-00805f9b34fb":"Serial number",
+    "00002a26-0000-1000-8000-00805f9b34fb":"Firmware revision",
+    "00002a27-0000-1000-8000-00805f9b34fb":"Hardware revision",
+    "00002a28-0000-1000-8000-00805f9b34fb":"Software revision"
+  };
+  const TEXT_CHARS = new Set(["00002a29","00002a24","00002a25","00002a26","00002a27","00002a28"]);
+
+  let device = null, abortWatch = null, logRows = [];
+  const last = new Map(), counts = new Map();
+
+  // ---------- settings ----------
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem("tpmsx:"+k); return v === null ? d : v; } catch { return d; } },
+    set(k, v){ try { localStorage.setItem("tpmsx:"+k, v); } catch {} }
+  };
+  $("prefix").value = store.get("prefix", "");
+  $("services").value = store.get("services", DEFAULT_SERVICES);
+  $("companies").value = store.get("companies", "0x022B");
+  ["prefix","services","companies"].forEach(id => $(id).addEventListener("change", e => store.set(id, e.target.value)));
+
+  const parseServices = txt => txt.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(s => {
+    const h = s.toLowerCase().replace(/^0x/, "");
+    if (/^[0-9a-f]{4}$|^[0-9a-f]{8}$/.test(h)) return parseInt(h, 16);
+    return s.toLowerCase();
+  });
+  const parseCompanies = txt => txt.split(/[\s,]+/).map(s => s.trim()).filter(Boolean).map(s => {
+    const n = /^0x/i.test(s) ? parseInt(s, 16) : parseInt(s, /[a-f]/i.test(s) ? 16 : 10);
+    return n;
+  }).filter(n => Number.isInteger(n) && n >= 0 && n <= 0xFFFF);
+
+  // ---------- helpers ----------
+  const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
+  const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
+  const ascii = b => Array.from(b, x => (x >= 32 && x < 127) ? String.fromCharCode(x) : ".").join("");
+  const short = u => { const m = /^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/.exec(u); return m ? "0x" + m[1].toUpperCase() : u; };
+  const label = u => NAMES[u] ? `${NAMES[u]} (${short(u)})` : short(u);
+  const ts = () => new Date().toISOString().slice(11, 23);
+
+  function log(msg, cls){
+    const line = `${ts()}  ${msg}`;
+    logRows.push(line);
+    if (logRows.length > 2000) logRows.shift();
+    const el = $("log");
+    const span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = line + "\n";
+    el.appendChild(span);
+    while (el.childNodes.length > 2000) el.removeChild(el.firstChild);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setButtons(){
+    const has = !!device;
+    const connected = has && device.gatt && device.gatt.connected;
+    $("watch").disabled = !has || !("watchAdvertisements" in (device || {}));
+    $("watch").textContent = abortWatch ? "Stop watching" : "Watch broadcasts";
+    $("connect").disabled = !has || connected;
+    $("disconnect").disabled = !connected;
+  }
+
+  // ---------- support check ----------
+  (async () => {
+    const s = $("support");
+    const problems = [];
+    if (!window.isSecureContext) problems.push("This page must be opened over HTTPS (or localhost).");
+    if (!navigator.bluetooth) problems.push("Web Bluetooth isn’t available in this browser. Use Chrome on Android.");
+    if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
+      try { if (!(await navigator.bluetooth.getAvailability())) problems.push("Bluetooth looks switched off or unavailable on this phone."); } catch {}
+    }
+    if (problems.length){ s.className = "bad"; s.textContent = problems.join(" "); $("pick").disabled = true; }
+    else {
+      const watchOk = typeof BluetoothDevice !== "undefined" && "watchAdvertisements" in BluetoothDevice.prototype;
+      s.textContent = watchOk
+        ? "Web Bluetooth is ready, including broadcast watching."
+        : "Web Bluetooth is ready, but broadcast watching needs a Chrome flag: open chrome://flags/#enable-experimental-web-platform-features, enable it and restart Chrome. Connecting and reading work without it.";
+    }
+  })();
+
+  // ---------- pick ----------
+  $("pick").addEventListener("click", async () => {
+    const prefix = $("prefix").value.trim();
+    const optionalServices = parseServices($("services").value);
+    const companies = parseCompanies($("companies").value);
+    if (!optionalServices.includes(TESLA_SVC)) optionalServices.push(TESLA_SVC);
+    const opts = { optionalServices };
+    if (companies.length) opts.optionalManufacturerData = companies;
+    if (prefix) opts.filters = [{ namePrefix: prefix }]; else opts.acceptAllDevices = true;
+    try {
+      const d = await navigator.bluetooth.requestDevice(opts);
+      await stopWatch();
+      if (device && device.gatt.connected) device.gatt.disconnect();
+      device = d;
+      last.clear(); counts.clear();
+      $("adv").replaceChildren(emptyEl("Start watching to see broadcasts from this sensor."));
+      $("gatt").replaceChildren(emptyEl("Connect to list the sensor’s services and characteristics."));
+      device.addEventListener("gattserverdisconnected", () => { log("Disconnected", "muted"); setButtons(); });
+      device.addEventListener("advertisementreceived", onAdv);
+      $("devname").className = "";
+      $("devname").textContent = device.name ? `Picked: ${device.name}` : "Picked: unnamed device";
+      log(`Picked ${device.name || "unnamed device"} (page id ${device.id})`, "ok");
+      $("setup").open = false;
+    } catch (e) {
+      if (e.name !== "NotFoundError") log(`Pick failed: ${e.message}`, "err");
+    }
+    setButtons();
+  });
+
+  // ---------- broadcasts ----------
+  async function stopWatch(){
+    if (abortWatch){ abortWatch.abort(); abortWatch = null; log("Stopped watching"); }
+  }
+  $("watch").addEventListener("click", async () => {
+    if (!device) return;
+    if (abortWatch){ await stopWatch(); setButtons(); return; }
+    abortWatch = new AbortController();
+    try {
+      await device.watchAdvertisements({ signal: abortWatch.signal });
+      log("Watching broadcasts", "ok");
+      if (!last.size) $("adv").replaceChildren(emptyEl("Waiting for the first packet. Sensors can broadcast slowly when the car is parked."));
+    } catch (e) {
+      abortWatch = null;
+      log(`Watching failed: ${e.message}`, "err");
+    }
+    setButtons();
+  });
+
+  function onAdv(ev){
+    const blocks = [];
+    ev.manufacturerData.forEach((dv, id) => blocks.push({ key: "m:" + id, title: `Manufacturer data, company 0x${id.toString(16).padStart(4, "0").toUpperCase()}`, bytes: bytesOf(dv) }));
+    ev.serviceData.forEach((dv, uuid) => blocks.push({ key: "s:" + uuid, title: `Service data, ${label(uuid)}`, bytes: bytesOf(dv) }));
+    if (!blocks.length){
+      log(`Packet RSSI ${ev.rssi} dBm with no visible data. Add its company ID or service UUID in setup.`, "muted");
+      return;
+    }
+    if ($("adv").querySelector(".empty")) $("adv").replaceChildren();
+    for (const b of blocks){
+      const prev = last.get(b.key);
+      const n = (counts.get(b.key) || 0) + 1;
+      counts.set(b.key, n);
+      last.set(b.key, b.bytes);
+      renderAdv(b, prev, n, ev.rssi);
+      const changed = prev ? b.bytes.reduce((a, x, i) => (prev[i] !== x ? a.concat(i) : a), []) : [];
+      log(`${b.title}  RSSI ${ev.rssi}  [${hex(b.bytes)}]${changed.length ? "  changed@" + changed.join(",") : ""}`);
+    }
+  }
+
+  function renderAdv(b, prev, n, rssi){
+    const id = "adv-" + b.key.replace(/[^a-z0-9]/gi, "_");
+    let card = document.getElementById(id);
+    if (!card){
+      card = document.createElement("div");
+      card.className = "card"; card.id = id;
+      $("adv").appendChild(card);
+    }
+    const h = document.createElement("h3"); h.textContent = b.title;
+    const meta = document.createElement("div"); meta.className = "meta";
+    for (const t of [`${n} packets`, `RSSI ${rssi} dBm`, `${b.bytes.length} bytes`, `Updated ${ts().slice(0, 8)}`]){
+      const s = document.createElement("span"); s.textContent = t; meta.appendChild(s);
+    }
+    const hx = document.createElement("div"); hx.className = "hex";
+    b.bytes.forEach((x, i) => {
+      const s = document.createElement("span");
+      s.textContent = x.toString(16).padStart(2, "0");
+      s.dataset.i = i;
+      if (prev && (prev.length !== b.bytes.length || prev[i] !== x)) s.className = "chg";
+      hx.appendChild(s);
+    });
+    const as = document.createElement("div"); as.className = "val mono muted"; as.textContent = ascii(b.bytes);
+    card.replaceChildren(h, meta, hx, as);
+  }
+
+  // ---------- GATT ----------
+  $("connect").addEventListener("click", async () => {
+    if (!device) return;
+    try {
+      log("Connecting…");
+      const server = await device.gatt.connect();
+      log("Connected. The car can’t hear this sensor until you disconnect.", "ok");
+      setButtons();
+      let services = [];
+      try { services = await server.getPrimaryServices(); }
+      catch (e) { log(`No allowed services found: ${e.message}`, "err"); }
+      const root = $("gatt"); root.replaceChildren();
+      if (!services.length){ root.appendChild(emptyEl("No allowed services. Add the sensor’s service UUIDs in setup, pick it again and reconnect.")); return; }
+      for (const svc of services){
+        const card = document.createElement("div"); card.className = "card svc";
+        const h = document.createElement("h3"); h.textContent = label(svc.uuid);
+        card.appendChild(h);
+        let chars = [];
+        try { chars = await svc.getCharacteristics(); } catch (e) { log(`Characteristics of ${short(svc.uuid)}: ${e.message}`, "err"); }
+        if (!chars.length){ const p = document.createElement("div"); p.className = "muted"; p.textContent = "No readable characteristics exposed."; card.appendChild(p); }
+        for (const ch of chars) card.appendChild(charRow(ch));
+        root.appendChild(card);
+        log(`Service ${label(svc.uuid)}: ${chars.length} characteristics`);
+      }
+    } catch (e) {
+      log(`Connect failed: ${e.message}`, "err");
+    }
+    setButtons();
+  });
+
+  function charRow(ch){
+    const row = document.createElement("div"); row.className = "chr";
+    const u = document.createElement("div"); u.className = "uuid"; u.textContent = label(ch.uuid);
+    const p = ch.properties;
+    const propList = ["read","notify","indicate","write","writeWithoutResponse"].filter(k => p[k]);
+    const pr = document.createElement("div"); pr.className = "props"; pr.textContent = propList.join(", ") || "no properties";
+    const val = document.createElement("div"); val.className = "val";
+    const btns = document.createElement("div"); btns.className = "btns"; btns.style.marginTop = "8px";
+    row.append(u, pr, btns, val);
+    if (p.read){
+      const b = document.createElement("button"); b.textContent = "Read";
+      b.onclick = async () => {
+        try { const dv = await ch.readValue(); showValue(val, ch.uuid, bytesOf(dv)); log(`Read ${label(ch.uuid)}: [${hex(bytesOf(dv))}]`); }
+        catch (e) { log(`Read ${short(ch.uuid)} failed: ${e.message}`, "err"); }
+      };
+      btns.appendChild(b);
+    }
+    if (p.notify || p.indicate){
+      const b = document.createElement("button"); b.textContent = "Subscribe";
+      let on = false, prev = null;
+      const handler = e => {
+        const bytes = bytesOf(e.target.value);
+        showValue(val, ch.uuid, bytes, prev); prev = bytes;
+        log(`Update ${label(ch.uuid)}: [${hex(bytes)}]`);
+      };
+      b.onclick = async () => {
+        try {
+          if (!on){ ch.addEventListener("characteristicvaluechanged", handler); await ch.startNotifications(); on = true; b.textContent = "Unsubscribe"; log(`Subscribed to ${label(ch.uuid)}`); }
+          else { await ch.stopNotifications(); ch.removeEventListener("characteristicvaluechanged", handler); on = false; b.textContent = "Subscribe"; log(`Unsubscribed from ${label(ch.uuid)}`); }
+        } catch (e) { log(`Subscribe ${short(ch.uuid)} failed: ${e.message}`, "err"); }
+      };
+      btns.appendChild(b);
+    }
+    if (!btns.childNodes.length) btns.remove();
+    return row;
+  }
+
+
+  // ---------- Tesla VCSEC decoding (FromTPWheelUnitMessage, not size-prefixed) ----------
+  function readVarint(b, p){
+    let x = 0n, shift = 0n;
+    while (p < b.length){ const c = b[p++]; x |= BigInt(c & 0x7f) << shift; if (!(c & 0x80)) return [x, p]; shift += 7n; }
+    throw new Error("truncated varint");
+  }
+  function parsePB(b){
+    const out = {}; let p = 0;
+    while (p < b.length){
+      let key; [key, p] = readVarint(b, p);
+      const field = Number(key >> 3n), wt = Number(key & 7n); let v;
+      if (wt === 0) [v, p] = readVarint(b, p);
+      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
+      else if (wt === 5){ v = b.slice(p, p + 4); p += 4; }
+      else if (wt === 1){ v = b.slice(p, p + 8); p += 8; }
+      else throw new Error("wire type " + wt);
+      (out[field] ||= []).push({ wt, v });
+    }
+    return out;
+  }
+  const sub = (m, f) => { const e = m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
+  const num = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 0 ? e.v : 0n; };
+  function decodeTesla(bytes){
+    try {
+      const um = sub(parsePB(bytes), 2); if (!um) return null;
+      const tp = sub(um, 28);
+      if (tp){
+        const abs = Number(num(tp, 1));
+        const t = num(tp, 2), temp = Number((t >> 1n) ^ -(t & 1n));
+        const gauge = Math.max(0, abs - 101.325);
+        return { kind: "data", abs, gauge, bar: gauge / 100, psi: gauge * 0.1450377, temp };
+      }
+      const cm = sub(um, 34);
+      if (cm) return { kind: "heartbeat", good: Number(num(cm, 1)), missed: Number(num(cm, 2)), badCrc: Number(num(cm, 3)) };
+      return { kind: "other" };
+    } catch { return null; }
+  }
+  let lastTesla = null;
+  function showTesla(el, d){
+    const b = document.createElement("div"); b.className = "reading";
+    if (d.kind === "data"){
+      lastTesla = d;
+      b.textContent = `${d.bar.toFixed(2)} bar (${d.psi.toFixed(1)} psi), ${d.temp} °C`;
+      log(`Tyre: ${d.bar.toFixed(2)} bar gauge, ${d.abs} kPa absolute, ${d.temp} °C`, "ok");
+    } else if (d.kind === "heartbeat"){
+      b.textContent = lastTesla ? `${lastTesla.bar.toFixed(2)} bar, ${lastTesla.temp} °C (unchanged, heartbeat)` : "Heartbeat, no reading yet";
+      log(`Heartbeat: ${d.good} good, ${d.missed} missed, ${d.badCrc} bad CRC connection events`);
+    } else b.textContent = "Message without tyre data";
+    el.appendChild(b);
+    if (d.kind === "data" && d.temp === 29) {
+      const w = document.createElement("div"); w.className = "muted";
+      w.textContent = "29 °C is the fixed value some clone sensors report. If it never changes, the temperature isn’t real.";
+      el.appendChild(w);
+    }
+  }
+  function showValue(el, uuid, bytes, prev){
+    el.replaceChildren();
+    if (uuid === TESLA_IND){ const d = decodeTesla(bytes); if (d) showTesla(el, d); }
+    const key = uuid.slice(0, 8);
+    if (key === "00002a19" && bytes.length){
+      const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = `Battery ${bytes[0]} %`; el.appendChild(b);
+    } else if (TEXT_CHARS.has(key)){
+      const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = new TextDecoder().decode(bytes); el.appendChild(b);
+    }
+    const hx = document.createElement("div"); hx.className = "hex";
+    bytes.forEach((x, i) => {
+      const s = document.createElement("span"); s.textContent = x.toString(16).padStart(2, "0"); s.dataset.i = i;
+      if (prev && prev[i] !== x) s.className = "chg";
+      hx.appendChild(s);
+    });
+    el.appendChild(hx);
+    const extra = document.createElement("div"); extra.className = "mono muted";
+    const parts = [`ascii ${ascii(bytes)}`];
+    if (bytes.length >= 2){ const dv = new DataView(bytes.buffer); parts.push(`u16le@0 ${dv.getUint16(0, true)}`); }
+    if (bytes.length >= 4){ const dv = new DataView(bytes.buffer); parts.push(`u32le@0 ${dv.getUint32(0, true)}`); }
+    extra.textContent = parts.join("   ");
+    el.appendChild(extra);
+  }
+
+  $("disconnect").addEventListener("click", () => { if (device && device.gatt.connected) device.gatt.disconnect(); setButtons(); });
+
+  // ---------- log tools ----------
+  $("copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(logRows.join("\n")); log("Log copied", "ok"); }
+    catch (e) { log(`Copy failed: ${e.message}`, "err"); }
+  });
+  $("download").addEventListener("click", () => {
+    const blob = new Blob([logRows.join("\n")], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `tpms-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $("clear").addEventListener("click", () => { logRows = []; $("log").replaceChildren(); });
+
+  function emptyEl(t){ const d = document.createElement("div"); d.className = "empty"; d.textContent = t; return d; }
+  setButtons();
+})();
+</script>
+</body>
+</html>
