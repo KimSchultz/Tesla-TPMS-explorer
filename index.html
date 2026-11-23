@@ -3,132 +3,96 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Tire sensor explorer</title>
+<title>Tesla tyre sensors</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#E9EBEE; --surface:#F7F8F9; --ink:#1E2226; --muted:#5B636B; --line:#C9CED4;
-  --accent:#F2B705; --accent-ink:#1E2226; --warn:#B3261E; --ok:#2E7D4F; --chg-bg:#F2B705; --chg-ink:#1E2226;
+  --accent:#F2B705; --accent-ink:#1E2226; --warn:#B3261E; --ok:#2E7D4F;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root{
     --bg:#16191C; --surface:#202429; --ink:#E6E8EA; --muted:#9AA3AC; --line:#343A41;
-    --accent:#F2B705; --accent-ink:#16191C; --warn:#FF8A80; --ok:#6FCF97; --chg-bg:#F2B705; --chg-ink:#16191C;
+    --accent:#F2B705; --accent-ink:#16191C; --warn:#FF8A80; --ok:#6FCF97;
     color-scheme:dark;
   }
 }
 *{box-sizing:border-box}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
-h1{font:600 2.6rem/1 "Barlow Condensed","Arial Narrow",sans-serif;margin:8px 0 6px;letter-spacing:-.01em}
-h2{font:600 1.5rem/1.2 "Barlow Condensed","Arial Narrow",sans-serif;margin:32px 0 6px}
-p{margin:0 0 12px;max-width:62ch}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font:600 2.4rem/1 "Barlow Condensed","Arial Narrow",sans-serif;margin:8px 0 6px}
+h2{font:600 1.4rem/1.2 "Barlow Condensed","Arial Narrow",sans-serif;margin:32px 0 8px}
+p{margin:0 0 12px}
 .muted{color:var(--muted)}
-.mono,code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-#support{border-left:4px solid var(--accent);padding:8px 12px;background:var(--surface);margin:12px 0}
-#support.bad{border-color:var(--warn)}
-details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-top:16px}
-summary{font-weight:600;cursor:pointer}
-ol{padding-left:20px;margin:10px 0}
-li{margin:4px 0}
-label{display:block;font-weight:500;margin:14px 0 4px}
-input,textarea{width:100%;font:15px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px}
-textarea{min-height:84px;resize:vertical}
-.hint{font-size:.9rem;color:var(--muted);margin-top:4px}
-.check{display:flex;align-items:center;gap:10px;font-weight:500;margin:14px 0 4px}
-.check input{width:auto;margin:0;transform:scale(1.3)}
-#tag{margin-bottom:10px}
-.taglabel{margin:0 0 4px;font-size:.9rem}
-.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px 0;margin-top:16px;border-bottom:1px solid var(--line)}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
-#devname{font-weight:600;margin-bottom:8px;min-height:1.5em}
-.btns{display:flex;flex-wrap:wrap;gap:8px}
-button{font:500 15px/1 Barlow,system-ui,sans-serif;min-height:44px;padding:0 16px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+#status{border-left:4px solid var(--accent);padding:10px 12px;background:var(--surface);margin:14px 0 18px;min-height:3em}
+#status.err{border-color:var(--warn)}
+#status.ok{border-color:var(--ok)}
+.car{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:relative}
+.axle{grid-column:1 / -1;text-align:center;font-size:.85rem;color:var(--muted);margin:-4px 0}
+.wheel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.wheel h3{margin:0;font-size:1rem;font-weight:600}
+.big{font:600 2.3rem/1.05 "Barlow Condensed","Arial Narrow",sans-serif;margin:4px 0 0}
+.big.none{color:var(--muted)}
+.sub{font-size:.9rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:0 10px}
+.state{font-size:.85rem;margin-top:4px}
+.state.err{color:var(--warn)}
+.state.ok{color:var(--ok)}
+.extra{font-size:.8rem;background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:4px 6px;margin-top:6px;word-break:break-all}
+.note{font-size:.8rem;color:var(--muted);margin-top:4px}
+button{font:500 15px/1 Barlow,system-ui,sans-serif;min-height:44px;padding:0 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;width:100%}
+.spacer{flex:1 1 auto;min-height:10px}
+button.link{min-height:36px;border:0;background:none;color:var(--muted);text-decoration:underline;padding:0;font-size:.85rem;align-self:flex-start}
 button:disabled{opacity:.45;cursor:default}
-button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.empty{color:var(--muted);border:1px dashed var(--line);border-radius:6px;padding:16px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:10px 0}
-.card h3{font-size:1rem;margin:0 0 4px;font-weight:600;word-break:break-all}
-.meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.9rem;color:var(--muted);margin-bottom:8px}
-.hex{display:flex;flex-wrap:wrap;gap:3px;font:15px/1 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto}
-.hex span{display:inline-block;padding:5px 3px;border-radius:3px;min-width:1.9em;text-align:center;position:relative}
-.hex span::after{content:attr(data-i);position:absolute;left:0;right:0;top:100%;font-size:9px;color:var(--muted);padding-top:2px}
-.hex{padding-bottom:14px}
-.hex span.chg{background:var(--chg-bg);color:var(--chg-ink);font-weight:600}
-@media (prefers-reduced-motion:no-preference){.hex span.chg{animation:pulse .9s ease-out}}
-@keyframes pulse{from{transform:translateY(-2px)}to{transform:none}}
-.svc{margin:10px 0}
-.chr{border-top:1px solid var(--line);padding:10px 0}
-.chr:first-of-type{border-top:0}
-.chr .uuid{font-size:.85rem;word-break:break-all}
-.props{font-size:.85rem;color:var(--muted)}
-.val{margin-top:6px;font-size:.9rem;word-break:break-all}
-.val b{font-weight:600}
-.fields{margin-top:8px;font-size:.85rem;word-break:break-all}
-.chgline{background:var(--chg-bg);color:var(--chg-ink)}
-.reading{font:600 1.9rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:4px 0 6px}
-pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12.5px;line-height:1.45;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0 0}
-.err{color:var(--warn)}
-.ok{color:var(--ok)}
+button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.err{color:var(--warn)}
+.empty{color:var(--muted);padding:14px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:24px}
+summary{font-weight:600;cursor:pointer}
+details ul{padding-left:20px;margin:10px 0 0}
+details li{margin:6px 0}
+a{color:inherit}
 </style>
 </head>
 <body>
 <main>
-  <h1>Tire sensor explorer</h1>
-  <p class="muted">Watch and read the Bluetooth tire pressure sensors in a Tesla from Chrome on Android. Read-only: this page never writes to a sensor.</p>
-  <div id="support"></div>
+  <h1>Tesla tyre sensors</h1>
+  <p class="muted">Stand at a wheel, tap Read and pick the sensor. Readings are saved on this phone.</p>
+  <div id="status">Ready.</div>
 
-  <details id="setup" open>
-    <summary>Before you scan</summary>
-    <ol>
-      <li>Stand next to one wheel and pick its sensor. Chrome’s picker shows each sensor’s address; original and Autel sensors start with BC:6A:29 or E4:FA:5B, and Service Mode › Chassis › TPMS shows which address sits on which wheel. Type the wheel or address into the label field so the log records which sensor each reading came from.</li>
-      <li>Pick one sensor. Its broadcasts only say “I’m here” (Tesla company ID 0x022B, payload 01 FE 03 while parked); the measurements are read over a connection, like the car does.</li>
-      <li>Connect, then tap Subscribe on “Tesla tyre data”. The sensor sends pressure and temperature straight away, then a heartbeat every four minutes while it stands still. It accepts one connection at a time, so this only works while the car isn’t connected to it, and the car can’t hear it until you disconnect.</li>
-      <li>Battery level hasn’t been confirmed in the sensor’s data. Each message lists every field it contains; a value that barely changes and differs slightly between your four sensors is the one to look at.</li>
-    </ol>
-    <label for="prefix">Name starts with (optional)</label>
-    <input id="prefix" autocomplete="off" spellcheck="false" placeholder="Leave empty to list every device">
-    <label class="check"><input type="checkbox" id="teslaOnly" checked> Only show Tesla tyre sensors</label>
-    <div class="hint">Lists only devices sending Tesla’s parked-sensor broadcast (company 0x022B, 01 FE 03). This hides the car and everything else nearby. Untick it if a sensor doesn’t show up, for example while the wheels are turning.</div>
-    <label for="services">Services to allow</label>
-    <textarea id="services" spellcheck="false"></textarea>
-    <div class="hint">One per line: a 16-bit ID like 0x180F, a full 128-bit UUID, or a name like battery_service.</div>
-    <label for="companies">Manufacturer company IDs to allow</label>
-    <input id="companies" autocomplete="off" spellcheck="false" placeholder="0x022B is Tesla, Inc.">
-    <div class="hint">Without this, Chrome hides manufacturer data in broadcasts.</div>
-  </details>
+  <div class="car" id="car"></div>
 
-  <div class="bar">
-    <div id="devname" class="muted">No sensor picked</div>
-    <label for="tag" class="taglabel">Wheel or address of this sensor (added to the log)</label>
-    <input id="tag" autocomplete="off" spellcheck="false" placeholder="e.g. FL BC:6A:29:12:34:56">
-    <div class="btns">
-      <button id="pick" class="primary">Pick sensor</button>
-      <button id="watch" disabled>Watch broadcasts</button>
-      <button id="connect" disabled>Connect</button>
-      <button id="disconnect" disabled>Disconnect</button>
-    </div>
-  </div>
-
-  <h2>Broadcasts</h2>
-  <p class="muted">Latest packet per data block. Highlighted bytes changed since the previous packet; the small numbers are byte offsets. Tesla sensors are expected to send presence frames only, so use this to confirm you picked a sensor.</p>
-  <div id="adv"><div class="empty">Pick a sensor and start watching. Driving a short distance first can wake sensors that are asleep.</div></div>
-
-  <h2>Services</h2>
-  <div id="gatt"><div class="empty">Connect to list the sensor’s services and characteristics.</div></div>
-
-  <h2>Log</h2>
+  <h2>Saved readings</h2>
+  <div class="tablewrap" id="history"></div>
   <div class="btns">
-    <button id="copy">Copy log</button>
-    <button id="download">Download log</button>
-    <button id="clear">Clear log</button>
+    <button id="csv">Download CSV</button>
+    <button id="json">Download JSON</button>
+    <button id="share" hidden>Share</button>
+    <button id="clear">Clear saved readings</button>
   </div>
-  <pre id="log"></pre>
+
+  <details>
+    <summary>Tips</summary>
+    <ul>
+      <li>The picker only lists Tesla tyre sensors that are parked and not connected to the car. If the car is awake and connected to a sensor, lock it and walk away for a minute.</li>
+      <li>The picker shows each sensor’s address. Service Mode › Chassis › TPMS on the car shows which address is on which wheel.</li>
+      <li>If a wheel’s sensor never appears in the list, tap “Not in list” on that wheel. That’s the usual sign of a dead sensor battery.</li>
+      <li>Battery level isn’t known to be sent by the sensor. If a sensor sends anything beyond pressure and temperature, it shows up highlighted as extra data.</li>
+      <li>Some clone sensors always report 29 °C. If a wheel never changes from 29 °C, the temperature isn’t real.</li>
+      <li>Readings stay in this browser on this phone. Clearing Chrome’s site data deletes them, so download a copy if you want to keep it.</li>
+      <li>Need raw services and broadcasts? Use the <a href="explorer.html">advanced explorer</a>.</li>
+    </ul>
+  </details>
 </main>
 
 <script>
@@ -136,266 +100,28 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   const $ = id => document.getElementById(id);
   const TESLA_SVC = "00000211-b2d1-43f0-9b88-960cebf8b91e";
   const TESLA_IND = "00000213-b2d1-43f0-9b88-960cebf8b91e";
-  const DEFAULT_SERVICES = TESLA_SVC + "\nbattery_service\ndevice_information";
-  const NAMES = {
-    "00000211-b2d1-43f0-9b88-960cebf8b91e":"Tesla sensor service",
-    "00000213-b2d1-43f0-9b88-960cebf8b91e":"Tesla tyre data",
-    "0000180f-0000-1000-8000-00805f9b34fb":"Battery service",
-    "00002a19-0000-1000-8000-00805f9b34fb":"Battery level",
-    "0000180a-0000-1000-8000-00805f9b34fb":"Device information",
-    "00002a29-0000-1000-8000-00805f9b34fb":"Manufacturer name",
-    "00002a24-0000-1000-8000-00805f9b34fb":"Model number",
-    "00002a25-0000-1000-8000-00805f9b34fb":"Serial number",
-    "00002a26-0000-1000-8000-00805f9b34fb":"Firmware revision",
-    "00002a27-0000-1000-8000-00805f9b34fb":"Hardware revision",
-    "00002a28-0000-1000-8000-00805f9b34fb":"Software revision"
-  };
-  const TEXT_CHARS = new Set(["00002a29","00002a24","00002a25","00002a26","00002a27","00002a28"]);
+  const TESLA_CO = 0x022B;
+  const WHEELS = [["FL", "Front left"], ["FR", "Front right"], ["RL", "Rear left"], ["RR", "Rear right"]];
+  const wheelName = w => (WHEELS.find(x => x[0] === w) || [w, w])[1];
+  const KEY = "tesla-tpms:readings:v1";
+  const KNOWN = new Set(["2", "2.28", "2.28.1", "2.28.2", "2.34", "2.34.1", "2.34.2", "2.34.3"]);
+  let busy = false;
 
-  let device = null, abortWatch = null, logRows = [];
-  const last = new Map(), counts = new Map();
-
-  // ---------- settings ----------
-  const store = {
-    get(k, d){ try { const v = localStorage.getItem("tpmsx:"+k); return v === null ? d : v; } catch { return d; } },
-    set(k, v){ try { localStorage.setItem("tpmsx:"+k, v); } catch {} }
-  };
-  $("prefix").value = store.get("prefix", "");
-  $("services").value = store.get("services", DEFAULT_SERVICES);
-  $("companies").value = store.get("companies", "0x022B");
-  ["prefix","services","companies"].forEach(id => $(id).addEventListener("change", e => store.set(id, e.target.value)));
-  $("teslaOnly").checked = store.get("teslaOnly", "1") === "1";
-  $("teslaOnly").addEventListener("change", e => store.set("teslaOnly", e.target.checked ? "1" : "0"));
-  $("tag").addEventListener("change", e => log(`Sensor label set to “${e.target.value.trim()}”`));
-
-  const parseServices = txt => txt.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(s => {
-    const h = s.toLowerCase().replace(/^0x/, "");
-    if (/^[0-9a-f]{4}$|^[0-9a-f]{8}$/.test(h)) return parseInt(h, 16);
-    return s.toLowerCase();
-  });
-  const parseCompanies = txt => txt.split(/[\s,]+/).map(s => s.trim()).filter(Boolean).map(s => {
-    const n = /^0x/i.test(s) ? parseInt(s, 16) : parseInt(s, /[a-f]/i.test(s) ? 16 : 10);
-    return n;
-  }).filter(n => Number.isInteger(n) && n >= 0 && n <= 0xFFFF);
+  // ---------- storage ----------
+  let readings = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })();
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(readings.slice(-1000))); }
+    catch (e) { status(`Couldn’t save on this phone: ${e.message}. Download a copy instead.`, "err"); }
+  }
 
   // ---------- helpers ----------
-  const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
   const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
-  const ascii = b => Array.from(b, x => (x >= 32 && x < 127) ? String.fromCharCode(x) : ".").join("");
-  const short = u => { const m = /^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/.exec(u); return m ? "0x" + m[1].toUpperCase() : u; };
-  const label = u => NAMES[u] ? `${NAMES[u]} (${short(u)})` : short(u);
-  const ts = () => new Date().toISOString().slice(11, 23);
+  const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
+  const fmtTime = iso => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  function status(msg, cls){ const s = $("status"); s.className = cls || ""; s.textContent = msg; }
+  function withTimeout(p, ms, msg){ let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg)), ms); })]).finally(() => clearTimeout(t)); }
 
-  function log(msg, cls){
-    const tag = $("tag").value.trim();
-    const line = `${ts()}  ${tag ? "[" + tag + "]  " : ""}${msg}`;
-    logRows.push(line);
-    if (logRows.length > 2000) logRows.shift();
-    const el = $("log");
-    const span = document.createElement("span");
-    if (cls) span.className = cls;
-    span.textContent = line + "\n";
-    el.appendChild(span);
-    while (el.childNodes.length > 2000) el.removeChild(el.firstChild);
-    el.scrollTop = el.scrollHeight;
-  }
-
-  function setButtons(){
-    const has = !!device;
-    const connected = has && device.gatt && device.gatt.connected;
-    $("watch").disabled = !has || !("watchAdvertisements" in (device || {}));
-    $("watch").textContent = abortWatch ? "Stop watching" : "Watch broadcasts";
-    $("connect").disabled = !has || connected;
-    $("disconnect").disabled = !connected;
-  }
-
-  // ---------- support check ----------
-  (async () => {
-    const s = $("support");
-    const problems = [];
-    if (!window.isSecureContext) problems.push("This page must be opened over HTTPS (or localhost).");
-    if (!navigator.bluetooth) problems.push("Web Bluetooth isn’t available in this browser. Use Chrome on Android.");
-    if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
-      try { if (!(await navigator.bluetooth.getAvailability())) problems.push("Bluetooth looks switched off or unavailable on this phone."); } catch {}
-    }
-    if (problems.length){ s.className = "bad"; s.textContent = problems.join(" "); $("pick").disabled = true; }
-    else {
-      const watchOk = typeof BluetoothDevice !== "undefined" && "watchAdvertisements" in BluetoothDevice.prototype;
-      s.textContent = watchOk
-        ? "Web Bluetooth is ready, including broadcast watching."
-        : "Web Bluetooth is ready, but broadcast watching needs a Chrome flag: open chrome://flags/#enable-experimental-web-platform-features, enable it and restart Chrome. Connecting and reading work without it.";
-    }
-  })();
-
-  // ---------- pick ----------
-  $("pick").addEventListener("click", async () => {
-    const prefix = $("prefix").value.trim();
-    const optionalServices = parseServices($("services").value);
-    const companies = parseCompanies($("companies").value);
-    if (!optionalServices.includes(TESLA_SVC)) optionalServices.push(TESLA_SVC);
-    const opts = { optionalServices };
-    if (companies.length) opts.optionalManufacturerData = companies;
-    const teslaOnly = $("teslaOnly").checked;
-    if (teslaOnly){
-      const f = { manufacturerData: [{ companyIdentifier: 0x022B, dataPrefix: new Uint8Array([0x01, 0xFE, 0x03]) }] };
-      if (prefix) f.namePrefix = prefix;
-      opts.filters = [f];
-    } else if (prefix) opts.filters = [{ namePrefix: prefix }]; else opts.acceptAllDevices = true;
-    try {
-      const d = await navigator.bluetooth.requestDevice(opts);
-      await stopWatch();
-      if (device && device.gatt.connected) device.gatt.disconnect();
-      device = d;
-      last.clear(); counts.clear(); lastFields.clear(); lastTesla = null;
-      $("adv").replaceChildren(emptyEl("Start watching to see broadcasts from this sensor."));
-      $("gatt").replaceChildren(emptyEl("Connect to list the sensor’s services and characteristics."));
-      device.addEventListener("gattserverdisconnected", () => { log("Disconnected", "muted"); setButtons(); });
-      device.addEventListener("advertisementreceived", onAdv);
-      $("devname").className = "";
-      $("devname").textContent = device.name ? `Picked: ${device.name}` : "Picked: unnamed device";
-      log(`Picked ${device.name || "unnamed device"} (page id ${device.id})`, "ok");
-      if (!$("tag").value.trim()) log("Tip: type this sensor’s wheel or address from the picker into the label field.", "muted");
-      $("setup").open = false;
-    } catch (e) {
-      if (e.name === "TypeError" && $("teslaOnly").checked) log("This Chrome can’t filter by manufacturer data. Untick “Only show Tesla tyre sensors” and pick again.", "err");
-      else if (e.name !== "NotFoundError") log(`Pick failed: ${e.message}`, "err");
-    }
-    setButtons();
-  });
-
-  // ---------- broadcasts ----------
-  async function stopWatch(){
-    if (abortWatch){ abortWatch.abort(); abortWatch = null; log("Stopped watching"); }
-  }
-  $("watch").addEventListener("click", async () => {
-    if (!device) return;
-    if (abortWatch){ await stopWatch(); setButtons(); return; }
-    abortWatch = new AbortController();
-    try {
-      await device.watchAdvertisements({ signal: abortWatch.signal });
-      log("Watching broadcasts", "ok");
-      if (!last.size) $("adv").replaceChildren(emptyEl("Waiting for the first packet. Sensors can broadcast slowly when the car is parked."));
-    } catch (e) {
-      abortWatch = null;
-      log(`Watching failed: ${e.message}`, "err");
-    }
-    setButtons();
-  });
-
-  function onAdv(ev){
-    const blocks = [];
-    ev.manufacturerData.forEach((dv, id) => blocks.push({ key: "m:" + id, title: `Manufacturer data, company 0x${id.toString(16).padStart(4, "0").toUpperCase()}`, bytes: bytesOf(dv) }));
-    ev.serviceData.forEach((dv, uuid) => blocks.push({ key: "s:" + uuid, title: `Service data, ${label(uuid)}`, bytes: bytesOf(dv) }));
-    if (!blocks.length){
-      log(`Packet RSSI ${ev.rssi} dBm with no visible data. Add its company ID or service UUID in setup.`, "muted");
-      return;
-    }
-    if ($("adv").querySelector(".empty")) $("adv").replaceChildren();
-    for (const b of blocks){
-      const prev = last.get(b.key);
-      const n = (counts.get(b.key) || 0) + 1;
-      counts.set(b.key, n);
-      last.set(b.key, b.bytes);
-      renderAdv(b, prev, n, ev.rssi);
-      const changed = prev ? b.bytes.reduce((a, x, i) => (prev[i] !== x ? a.concat(i) : a), []) : [];
-      log(`${b.title}  RSSI ${ev.rssi}  [${hex(b.bytes)}]${changed.length ? "  changed@" + changed.join(",") : ""}`);
-    }
-  }
-
-  function renderAdv(b, prev, n, rssi){
-    const id = "adv-" + b.key.replace(/[^a-z0-9]/gi, "_");
-    let card = document.getElementById(id);
-    if (!card){
-      card = document.createElement("div");
-      card.className = "card"; card.id = id;
-      $("adv").appendChild(card);
-    }
-    const h = document.createElement("h3"); h.textContent = b.title;
-    const meta = document.createElement("div"); meta.className = "meta";
-    for (const t of [`${n} packets`, `RSSI ${rssi} dBm`, `${b.bytes.length} bytes`, `Updated ${ts().slice(0, 8)}`]){
-      const s = document.createElement("span"); s.textContent = t; meta.appendChild(s);
-    }
-    const hx = document.createElement("div"); hx.className = "hex";
-    b.bytes.forEach((x, i) => {
-      const s = document.createElement("span");
-      s.textContent = x.toString(16).padStart(2, "0");
-      s.dataset.i = i;
-      if (prev && (prev.length !== b.bytes.length || prev[i] !== x)) s.className = "chg";
-      hx.appendChild(s);
-    });
-    const as = document.createElement("div"); as.className = "val mono muted"; as.textContent = ascii(b.bytes);
-    card.replaceChildren(h, meta, hx, as);
-  }
-
-  // ---------- GATT ----------
-  $("connect").addEventListener("click", async () => {
-    if (!device) return;
-    try {
-      log("Connecting…");
-      const server = await device.gatt.connect();
-      log("Connected. The car can’t hear this sensor until you disconnect.", "ok");
-      setButtons();
-      let services = [];
-      try { services = await server.getPrimaryServices(); }
-      catch (e) { log(`No allowed services found: ${e.message}`, "err"); }
-      const root = $("gatt"); root.replaceChildren();
-      if (!services.length){ root.appendChild(emptyEl("No allowed services. Add the sensor’s service UUIDs in setup, pick it again and reconnect.")); return; }
-      for (const svc of services){
-        const card = document.createElement("div"); card.className = "card svc";
-        const h = document.createElement("h3"); h.textContent = label(svc.uuid);
-        card.appendChild(h);
-        let chars = [];
-        try { chars = await svc.getCharacteristics(); } catch (e) { log(`Characteristics of ${short(svc.uuid)}: ${e.message}`, "err"); }
-        if (!chars.length){ const p = document.createElement("div"); p.className = "muted"; p.textContent = "No readable characteristics exposed."; card.appendChild(p); }
-        for (const ch of chars) card.appendChild(charRow(ch));
-        root.appendChild(card);
-        log(`Service ${label(svc.uuid)}: ${chars.length} characteristics`);
-      }
-    } catch (e) {
-      log(`Connect failed: ${e.message}`, "err");
-    }
-    setButtons();
-  });
-
-  function charRow(ch){
-    const row = document.createElement("div"); row.className = "chr";
-    const u = document.createElement("div"); u.className = "uuid"; u.textContent = label(ch.uuid);
-    const p = ch.properties;
-    const propList = ["read","notify","indicate","write","writeWithoutResponse"].filter(k => p[k]);
-    const pr = document.createElement("div"); pr.className = "props"; pr.textContent = propList.join(", ") || "no properties";
-    const val = document.createElement("div"); val.className = "val";
-    const btns = document.createElement("div"); btns.className = "btns"; btns.style.marginTop = "8px";
-    row.append(u, pr, btns, val);
-    if (p.read){
-      const b = document.createElement("button"); b.textContent = "Read";
-      b.onclick = async () => {
-        try { const dv = await ch.readValue(); showValue(val, ch.uuid, bytesOf(dv)); log(`Read ${label(ch.uuid)}: [${hex(bytesOf(dv))}]`); }
-        catch (e) { log(`Read ${short(ch.uuid)} failed: ${e.message}`, "err"); }
-      };
-      btns.appendChild(b);
-    }
-    if (p.notify || p.indicate){
-      const b = document.createElement("button"); b.textContent = "Subscribe";
-      let on = false, prev = null;
-      const handler = e => {
-        const bytes = bytesOf(e.target.value);
-        showValue(val, ch.uuid, bytes, prev); prev = bytes;
-        log(`Update ${label(ch.uuid)}: [${hex(bytes)}]`);
-      };
-      b.onclick = async () => {
-        try {
-          if (!on){ ch.addEventListener("characteristicvaluechanged", handler); await ch.startNotifications(); on = true; b.textContent = "Unsubscribe"; log(`Subscribed to ${label(ch.uuid)}`); }
-          else { await ch.stopNotifications(); ch.removeEventListener("characteristicvaluechanged", handler); on = false; b.textContent = "Subscribe"; log(`Unsubscribed from ${label(ch.uuid)}`); }
-        } catch (e) { log(`Subscribe ${short(ch.uuid)} failed: ${e.message}`, "err"); }
-      };
-      btns.appendChild(b);
-    }
-    if (!btns.childNodes.length) btns.remove();
-    return row;
-  }
-
-
-  // ---------- Tesla VCSEC decoding (FromTPWheelUnitMessage, not size-prefixed) ----------
+  // ---------- protobuf (Tesla VCSEC FromTPWheelUnitMessage, not size-prefixed) ----------
   function readVarint(b, p){
     let x = 0n, shift = 0n;
     while (p < b.length){ const c = b[p++]; x |= BigInt(c & 0x7f) << shift; if (!(c & 0x80)) return [x, p]; shift += 7n; }
@@ -408,132 +134,211 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
       const field = Number(key >> 3n), wt = Number(key & 7n); let v;
       if (field === 0) throw new Error("field 0");
       if (wt === 0) [v, p] = readVarint(b, p);
-      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
-      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated fixed32"); v = b.slice(p, p + 4); p += 4; }
-      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated fixed64"); v = b.slice(p, p + 8); p += 8; }
+      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated"); v = b.slice(p, p + len); p += len; }
+      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated"); v = b.slice(p, p + 4); p += 4; }
+      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated"); v = b.slice(p, p + 8); p += 8; }
       else throw new Error("wire type " + wt);
       (out[field] ||= []).push({ wt, v });
     }
     return out;
   }
-  const sub = (m, f) => { const e = m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
+  const sub = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
   const num = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 0 ? e.v : 0n; };
   function decodeTesla(bytes){
     try {
       const um = sub(parsePB(bytes), 2); if (!um) return null;
       const tp = sub(um, 28);
-      if (tp){
-        const abs = Number(num(tp, 1));
-        const t = num(tp, 2), temp = Number((t >> 1n) ^ -(t & 1n));
-        const gauge = Math.max(0, abs - 101.325);
-        return { kind: "data", abs, gauge, bar: gauge / 100, psi: gauge * 0.1450377, temp };
-      }
-      const cm = sub(um, 34);
-      if (cm) return { kind: "heartbeat", good: Number(num(cm, 1)), missed: Number(num(cm, 2)), badCrc: Number(num(cm, 3)) };
-      return { kind: "other" };
+      if (!tp) return { kind: sub(um, 34) ? "heartbeat" : "other" };
+      const abs = Number(num(tp, 1)), t = num(tp, 2);
+      const temp = Number((t >> 1n) ^ -(t & 1n));
+      const gauge = Math.max(0, abs - 101.325);
+      return { kind: "data", abs, gauge, bar: gauge / 100, psi: gauge * 0.1450377, temp };
     } catch { return null; }
   }
-  let lastTesla = null;
-  const lastFields = new Map();
   function dumpPB(bytes, prefix, out, depth){
     let m; try { m = parsePB(bytes); } catch { return false; }
     for (const f of Object.keys(m).map(Number).sort((a, b) => a - b)){
       m[f].forEach((e, i) => {
         const path = prefix + f + (m[f].length > 1 ? `[${i}]` : "");
-        if (e.wt === 0){ const s = (e.v >> 1n) ^ -(e.v & 1n); out.push({ path, text: `varint ${e.v} (zigzag ${s})` }); }
-        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); out.push({ path, text: `fixed32 ${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(6)})` }); }
-        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); out.push({ path, text: `fixed64 ${dv.getBigUint64(0, true)} (double ${dv.getFloat64(0, true).toPrecision(8)})` }); }
+        if (e.wt === 0){ const s = (e.v >> 1n) ^ -(e.v & 1n); out.push({ path, text: `${e.v} (signed ${s})` }); }
+        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); out.push({ path, text: `${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(5)})` }); }
+        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); out.push({ path, text: `${dv.getBigUint64(0, true)}` }); }
         else {
           const start = out.length;
-          out.push({ path, text: `message, ${e.v.length} bytes` });
-          if (!(depth < 6 && e.v.length && dumpPB(e.v, path + ".", out, depth + 1))){
-            out.length = start;
-            out.push({ path, text: `bytes [${hex(e.v)}] "${ascii(e.v)}"` });
-          }
+          out.push({ path, text: `message ${e.v.length} B` });
+          if (!(depth < 6 && e.v.length && dumpPB(e.v, path + ".", out, depth + 1))){ out.length = start; out.push({ path, text: `[${hex(e.v)}]` }); }
         }
       });
     }
     return true;
   }
-  function renderFields(el, bytes){
-    const out = [];
-    if (!dumpPB(bytes, "", out, 0)) return;
-    const box = document.createElement("div"); box.className = "fields";
-    const t = document.createElement("div"); t.className = "muted";
-    t.textContent = "Every field in this message. Paths are protobuf field numbers; highlighted lines changed since the last message.";
-    box.appendChild(t);
-    for (const r of out){
-      const line = document.createElement("div"); line.className = "mono";
-      const prev = lastFields.get(r.path);
-      if (prev !== undefined && prev !== r.text) line.classList.add("chgline");
-      lastFields.set(r.path, r.text);
-      line.textContent = `${r.path}  ${r.text}`;
-      box.appendChild(line);
-    }
-    el.appendChild(box);
-    log("Fields: " + out.map(r => `${r.path}=${r.text}`).join("  |  "));
-  }
-  function showTesla(el, d){
-    const b = document.createElement("div"); b.className = "reading";
-    if (d.kind === "data"){
-      lastTesla = d;
-      b.textContent = `${d.bar.toFixed(2)} bar (${d.psi.toFixed(1)} psi), ${d.temp} °C`;
-      log(`Tyre: ${d.bar.toFixed(2)} bar gauge, ${d.abs} kPa absolute, ${d.temp} °C`, "ok");
-    } else if (d.kind === "heartbeat"){
-      b.textContent = lastTesla ? `${lastTesla.bar.toFixed(2)} bar, ${lastTesla.temp} °C (unchanged, heartbeat)` : "Heartbeat, no reading yet";
-      log(`Heartbeat: ${d.good} good, ${d.missed} missed, ${d.badCrc} bad CRC connection events`);
-    } else b.textContent = "Message without tyre data";
-    el.appendChild(b);
-    if (d.kind === "data" && d.temp === 29) {
-      const w = document.createElement("div"); w.className = "muted";
-      w.textContent = "29 °C is the fixed value some clone sensors report. If it never changes, the temperature isn’t real.";
-      el.appendChild(w);
+
+  // ---------- Bluetooth ----------
+  async function pick(){
+    const base = { optionalServices: [TESLA_SVC], optionalManufacturerData: [TESLA_CO] };
+    try {
+      return await navigator.bluetooth.requestDevice({ ...base, filters: [{ manufacturerData: [{ companyIdentifier: TESLA_CO, dataPrefix: new Uint8Array([0x01, 0xFE, 0x03]) }] }] });
+    } catch (e) {
+      if (e.name !== "TypeError") throw e;
+      return await navigator.bluetooth.requestDevice({ ...base, acceptAllDevices: true }); // older Chrome: no manufacturer-data filter
     }
   }
-  function showValue(el, uuid, bytes, prev){
-    el.replaceChildren();
-    if (uuid === TESLA_IND){ const d = decodeTesla(bytes); if (d) showTesla(el, d); renderFields(el, bytes); }
-    const key = uuid.slice(0, 8);
-    if (key === "00002a19" && bytes.length){
-      const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = `Battery ${bytes[0]} %`; el.appendChild(b);
-    } else if (TEXT_CHARS.has(key)){
-      const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = new TextDecoder().decode(bytes); el.appendChild(b);
-    }
-    const hx = document.createElement("div"); hx.className = "hex";
-    bytes.forEach((x, i) => {
-      const s = document.createElement("span"); s.textContent = x.toString(16).padStart(2, "0"); s.dataset.i = i;
-      if (prev && prev[i] !== x) s.className = "chg";
-      hx.appendChild(s);
+
+  // Subscribes to the sensor's indications and returns every message received. Stops 2 s after the first tyre reading, or after `ms`.
+  function collect(ch, ms){
+    return new Promise((resolve, reject) => {
+      const msgs = []; let after = null;
+      const finish = () => {
+        clearTimeout(overall); clearTimeout(after);
+        ch.removeEventListener("characteristicvaluechanged", onValue);
+        ch.stopNotifications().catch(() => {});
+        resolve(msgs);
+      };
+      const onValue = e => {
+        const b = bytesOf(e.target.value); msgs.push(b);
+        const d = decodeTesla(b);
+        if (d && d.kind === "data" && !after) after = setTimeout(finish, 2000);
+      };
+      const overall = setTimeout(finish, ms);
+      ch.addEventListener("characteristicvaluechanged", onValue);
+      ch.startNotifications().catch(err => { clearTimeout(overall); ch.removeEventListener("characteristicvaluechanged", onValue); reject(err); });
     });
-    el.appendChild(hx);
-    const extra = document.createElement("div"); extra.className = "mono muted";
-    const parts = [`ascii ${ascii(bytes)}`];
-    if (bytes.length >= 2){ const dv = new DataView(bytes.buffer); parts.push(`u16le@0 ${dv.getUint16(0, true)}`); }
-    if (bytes.length >= 4){ const dv = new DataView(bytes.buffer); parts.push(`u32le@0 ${dv.getUint32(0, true)}`); }
-    extra.textContent = parts.join("   ");
-    el.appendChild(extra);
   }
 
-  $("disconnect").addEventListener("click", () => { if (device && device.gatt.connected) device.gatt.disconnect(); setButtons(); });
+  async function readWheel(w){
+    if (busy) return;
+    busy = true; render();
+    status(`Pick the sensor at the ${wheelName(w).toLowerCase()} wheel.`);
+    let device;
+    try { device = await pick(); }
+    catch (e) {
+      busy = false; render();
+      if (e.name === "NotFoundError") status(`Nothing picked. If the ${wheelName(w).toLowerCase()} sensor wasn’t in the list, tap “Not in list” on that wheel.`);
+      else status(`Couldn’t open the picker: ${e.message}`, "err");
+      return;
+    }
+    const rec = { wheel: w, time: new Date().toISOString(), ok: false, device: device.name || null };
+    try {
+      status(`Connecting to the ${wheelName(w).toLowerCase()} sensor…`);
+      const server = await withTimeout(device.gatt.connect(), 12000, "The sensor didn’t accept a connection. The car may be connected to it; lock the car, walk away for a minute and try again.");
+      const svc = await withTimeout(server.getPrimaryService(TESLA_SVC), 8000, "This device doesn’t have the Tesla sensor service. Was the right device picked?");
+      const ch = await svc.getCharacteristic(TESLA_IND);
+      status(`Reading the ${wheelName(w).toLowerCase()} sensor…`);
+      const msgs = await collect(ch, 15000);
+      rec.messages = msgs.map(hex);
+      const data = msgs.map(decodeTesla).find(d => d && d.kind === "data");
+      if (!data) throw new Error("Connected, but the sensor sent no tyre data within 15 seconds. Try again.");
+      Object.assign(rec, { ok: true, absKpa: data.abs, bar: +data.bar.toFixed(2), psi: +data.psi.toFixed(1), tempC: data.temp });
+      const extra = new Map();
+      for (const m of msgs){ const out = []; dumpPB(m, "", out, 0); out.filter(f => !KNOWN.has(f.path)).forEach(f => extra.set(f.path, f.text)); }
+      rec.extra = Array.from(extra, ([p, t]) => `${p} = ${t}`);
+      status(`${wheelName(w)}: ${rec.bar.toFixed(2)} bar, ${rec.tempC} °C. Saved.`, "ok");
+    } catch (e) {
+      rec.error = e.message;
+      status(e.message, "err");
+    } finally {
+      try { if (device.gatt.connected) device.gatt.disconnect(); } catch {}
+      readings.push(rec); save();
+      busy = false; render();
+    }
+  }
 
-  // ---------- log tools ----------
-  $("copy").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(logRows.join("\n")); log("Log copied", "ok"); }
-    catch (e) { log(`Copy failed: ${e.message}`, "err"); }
-  });
-  $("download").addEventListener("click", () => {
-    const blob = new Blob([logRows.join("\n")], { type: "text/plain" });
+  function markMissing(w){
+    readings.push({ wheel: w, time: new Date().toISOString(), ok: false, missing: true });
+    save(); render();
+    status(`${wheelName(w)} saved as not found.`);
+  }
+
+  // ---------- UI ----------
+  function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function renderCar(){
+    const car = $("car"); car.replaceChildren();
+    const add = w => {
+      const mine = readings.filter(r => r.wheel === w);
+      const lastOk = [...mine].reverse().find(r => r.ok);
+      const latest = mine[mine.length - 1];
+      const card = el("section", "wheel");
+      card.append(el("h3", null, wheelName(w)));
+      card.append(el("div", "big" + (lastOk ? "" : " none"), lastOk ? `${lastOk.bar.toFixed(2)} bar` : "–"));
+      const s = el("div", "sub");
+      if (lastOk){ s.append(el("span", null, `${lastOk.tempC} °C`), el("span", null, `${lastOk.psi} psi`)); }
+      card.append(s);
+      let state, cls = "";
+      if (!latest) state = "Not read yet";
+      else if (latest.missing){ state = `Not found ${fmtTime(latest.time)}`; cls = "err"; }
+      else if (!latest.ok){ state = `Last try failed ${fmtTime(latest.time)}`; cls = "err"; }
+      else { state = `Read ${fmtTime(latest.time)}`; cls = "ok"; }
+      card.append(el("div", "state " + cls, state));
+      if (lastOk && lastOk.tempC === 29) card.append(el("div", "note", "29 °C can be a clone’s fixed value."));
+      if (lastOk && lastOk.extra && lastOk.extra.length) card.append(el("div", "extra", "Extra data: " + lastOk.extra.join(", ")));
+      const b = el("button", "primary", busy ? "Busy…" : "Read"); b.disabled = busy || !navigator.bluetooth; b.onclick = () => readWheel(w);
+      const m = el("button", "link", "Not in list"); m.disabled = busy; m.onclick = () => markMissing(w);
+      card.append(el("div", "spacer"), b, m);
+      car.append(card);
+    };
+    car.append(el("div", "axle", "Front"));
+    add("FL"); add("FR");
+    add("RL"); add("RR");
+    car.append(el("div", "axle", "Rear"));
+  }
+
+  function renderHistory(){
+    const box = $("history"); box.replaceChildren();
+    if (!readings.length){ box.append(el("div", "empty", "No readings yet. Tap Read on a wheel to start.")); return; }
+    const t = el("table"); const head = el("tr");
+    ["Wheel", "When", "Pressure", "Temp", "Note"].forEach(h => head.append(el("th", null, h)));
+    t.append(head);
+    readings.slice(-40).reverse().forEach(r => {
+      const tr = el("tr");
+      tr.append(el("td", null, r.wheel), el("td", null, fmtTime(r.time)));
+      if (r.ok){
+        tr.append(el("td", null, `${r.bar.toFixed(2)} bar`), el("td", null, `${r.tempC} °C`), el("td", null, r.extra && r.extra.length ? "Extra data" : ""));
+      } else {
+        tr.append(el("td", null, "–"), el("td", null, "–"), el("td", "err", r.missing ? "Not found" : "Failed"));
+      }
+      t.append(tr);
+    });
+    box.append(t);
+  }
+
+  function render(){ renderCar(); renderHistory(); }
+
+  // ---------- export ----------
+  const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  function csvText(){
+    const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+    const rows = [["wheel", "time", "result", "bar", "psi", "abs_kpa", "temp_c", "extra", "error"]];
+    readings.forEach(r => rows.push([r.wheel, r.time, r.ok ? "ok" : r.missing ? "not_found" : "failed", r.bar, r.psi, r.absKpa, r.tempC, (r.extra || []).join("; "), r.error]));
+    return rows.map(r => r.map(q).join(",")).join("\n");
+  }
+  function download(name, text, type){
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    const tagPart = $("tag").value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
-    a.download = `tpms-log-${tagPart ? tagPart + "-" : ""}${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
-  $("clear").addEventListener("click", () => { logRows = []; $("log").replaceChildren(); });
+  }
+  $("csv").onclick = () => download(`tesla-tpms-${stamp()}.csv`, csvText(), "text/csv");
+  $("json").onclick = () => download(`tesla-tpms-${stamp()}.json`, JSON.stringify(readings, null, 2), "application/json");
+  const testFile = new File(["x"], "t.csv", { type: "text/csv" });
+  if (navigator.canShare && navigator.canShare({ files: [testFile] })){
+    $("share").hidden = false;
+    $("share").onclick = async () => {
+      try { await navigator.share({ files: [new File([csvText()], `tesla-tpms-${stamp()}.csv`, { type: "text/csv" })], title: "Tesla tyre sensor readings" }); }
+      catch (e) { if (e.name !== "AbortError") status(`Couldn’t share: ${e.message}`, "err"); }
+    };
+  }
+  $("clear").onclick = () => {
+    if (!readings.length) return;
+    if (!confirm(`Delete all ${readings.length} saved readings from this phone? Download a copy first if you want to keep them.`)) return;
+    readings = []; save(); render(); status("Saved readings cleared.");
+  };
 
-  function emptyEl(t){ const d = document.createElement("div"); d.className = "empty"; d.textContent = t; return d; }
-  setButtons();
+  // ---------- start ----------
+  if (!window.isSecureContext) status("Open this page over HTTPS for Bluetooth to work.", "err");
+  else if (!navigator.bluetooth) status("Bluetooth isn’t available in this browser. Open the page in Chrome on Android.", "err");
+  else if (readings.length) status(`Ready. ${readings.length} saved readings on this phone.`);
+  render();
 })();
 </script>
 </body>
