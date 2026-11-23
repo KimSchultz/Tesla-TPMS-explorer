@@ -65,6 +65,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-vi
 .props{font-size:.85rem;color:var(--muted)}
 .val{margin-top:6px;font-size:.9rem;word-break:break-all}
 .val b{font-weight:600}
+.fields{margin-top:8px;font-size:.85rem;word-break:break-all}
+.chgline{background:var(--chg-bg);color:var(--chg-ink)}
 .reading{font:600 1.9rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:4px 0 6px}
 pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12.5px;line-height:1.45;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0 0}
 .err{color:var(--warn)}
@@ -83,7 +85,7 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
       <li>Stand next to one wheel. The four sensors look identical in Chrome’s picker, so signal strength is how you tell them apart.</li>
       <li>Pick one sensor. Its broadcasts only say “I’m here” (Tesla company ID 0x022B, payload 01 FE 03 while parked); the measurements are read over a connection, like the car does.</li>
       <li>Connect, then tap Subscribe on “Tesla tyre data”. The sensor sends pressure and temperature straight away, then a heartbeat every four minutes while it stands still. It accepts one connection at a time, so this only works while the car isn’t connected to it, and the car can’t hear it until you disconnect.</li>
-      <li>Battery level isn’t available: the sensor doesn’t include it in its data, and it ignores requests from anything but its paired car.</li>
+      <li>Battery level hasn’t been confirmed in the sensor’s data. Each message lists every field it contains; a value that barely changes and differs slightly between your four sensors is the one to look at.</li>
     </ol>
     <label for="prefix">Name starts with (optional)</label>
     <input id="prefix" autocomplete="off" spellcheck="false" placeholder="Leave empty to list every device">
@@ -385,10 +387,11 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
     while (p < b.length){
       let key; [key, p] = readVarint(b, p);
       const field = Number(key >> 3n), wt = Number(key & 7n); let v;
+      if (field === 0) throw new Error("field 0");
       if (wt === 0) [v, p] = readVarint(b, p);
       else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
-      else if (wt === 5){ v = b.slice(p, p + 4); p += 4; }
-      else if (wt === 1){ v = b.slice(p, p + 8); p += 8; }
+      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated fixed32"); v = b.slice(p, p + 4); p += 4; }
+      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated fixed64"); v = b.slice(p, p + 8); p += 8; }
       else throw new Error("wire type " + wt);
       (out[field] ||= []).push({ wt, v });
     }
@@ -412,6 +415,45 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
     } catch { return null; }
   }
   let lastTesla = null;
+  const lastFields = new Map();
+  function dumpPB(bytes, prefix, out, depth){
+    let m; try { m = parsePB(bytes); } catch { return false; }
+    for (const f of Object.keys(m).map(Number).sort((a, b) => a - b)){
+      m[f].forEach((e, i) => {
+        const path = prefix + f + (m[f].length > 1 ? `[${i}]` : "");
+        if (e.wt === 0){ const s = (e.v >> 1n) ^ -(e.v & 1n); out.push({ path, text: `varint ${e.v} (zigzag ${s})` }); }
+        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); out.push({ path, text: `fixed32 ${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(6)})` }); }
+        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); out.push({ path, text: `fixed64 ${dv.getBigUint64(0, true)} (double ${dv.getFloat64(0, true).toPrecision(8)})` }); }
+        else {
+          const start = out.length;
+          out.push({ path, text: `message, ${e.v.length} bytes` });
+          if (!(depth < 6 && e.v.length && dumpPB(e.v, path + ".", out, depth + 1))){
+            out.length = start;
+            out.push({ path, text: `bytes [${hex(e.v)}] "${ascii(e.v)}"` });
+          }
+        }
+      });
+    }
+    return true;
+  }
+  function renderFields(el, bytes){
+    const out = [];
+    if (!dumpPB(bytes, "", out, 0)) return;
+    const box = document.createElement("div"); box.className = "fields";
+    const t = document.createElement("div"); t.className = "muted";
+    t.textContent = "Every field in this message. Paths are protobuf field numbers; highlighted lines changed since the last message.";
+    box.appendChild(t);
+    for (const r of out){
+      const line = document.createElement("div"); line.className = "mono";
+      const prev = lastFields.get(r.path);
+      if (prev !== undefined && prev !== r.text) line.classList.add("chgline");
+      lastFields.set(r.path, r.text);
+      line.textContent = `${r.path}  ${r.text}`;
+      box.appendChild(line);
+    }
+    el.appendChild(box);
+    log("Fields: " + out.map(r => `${r.path}=${r.text}`).join("  |  "));
+  }
   function showTesla(el, d){
     const b = document.createElement("div"); b.className = "reading";
     if (d.kind === "data"){
@@ -431,7 +473,7 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   }
   function showValue(el, uuid, bytes, prev){
     el.replaceChildren();
-    if (uuid === TESLA_IND){ const d = decodeTesla(bytes); if (d) showTesla(el, d); }
+    if (uuid === TESLA_IND){ const d = decodeTesla(bytes); if (d) showTesla(el, d); renderFields(el, bytes); }
     const key = uuid.slice(0, 8);
     if (key === "00002a19" && bytes.length){
       const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = `Battery ${bytes[0]} %`; el.appendChild(b);
