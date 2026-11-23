@@ -39,6 +39,10 @@ label{display:block;font-weight:500;margin:14px 0 4px}
 input,textarea{width:100%;font:15px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px}
 textarea{min-height:84px;resize:vertical}
 .hint{font-size:.9rem;color:var(--muted);margin-top:4px}
+.check{display:flex;align-items:center;gap:10px;font-weight:500;margin:14px 0 4px}
+.check input{width:auto;margin:0;transform:scale(1.3)}
+#tag{margin-bottom:10px}
+.taglabel{margin:0 0 4px;font-size:.9rem}
 .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px 0;margin-top:16px;border-bottom:1px solid var(--line)}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 #devname{font-weight:600;margin-bottom:8px;min-height:1.5em}
@@ -82,13 +86,15 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   <details id="setup" open>
     <summary>Before you scan</summary>
     <ol>
-      <li>Stand next to one wheel. The four sensors look identical in Chrome’s picker, so signal strength is how you tell them apart.</li>
+      <li>Stand next to one wheel and pick its sensor. Chrome’s picker shows each sensor’s address; original and Autel sensors start with BC:6A:29 or E4:FA:5B, and Service Mode › Chassis › TPMS shows which address sits on which wheel. Type the wheel or address into the label field so the log records which sensor each reading came from.</li>
       <li>Pick one sensor. Its broadcasts only say “I’m here” (Tesla company ID 0x022B, payload 01 FE 03 while parked); the measurements are read over a connection, like the car does.</li>
       <li>Connect, then tap Subscribe on “Tesla tyre data”. The sensor sends pressure and temperature straight away, then a heartbeat every four minutes while it stands still. It accepts one connection at a time, so this only works while the car isn’t connected to it, and the car can’t hear it until you disconnect.</li>
       <li>Battery level hasn’t been confirmed in the sensor’s data. Each message lists every field it contains; a value that barely changes and differs slightly between your four sensors is the one to look at.</li>
     </ol>
     <label for="prefix">Name starts with (optional)</label>
     <input id="prefix" autocomplete="off" spellcheck="false" placeholder="Leave empty to list every device">
+    <label class="check"><input type="checkbox" id="teslaOnly" checked> Only show Tesla tyre sensors</label>
+    <div class="hint">Lists only devices sending Tesla’s parked-sensor broadcast (company 0x022B, 01 FE 03). This hides the car and everything else nearby. Untick it if a sensor doesn’t show up, for example while the wheels are turning.</div>
     <label for="services">Services to allow</label>
     <textarea id="services" spellcheck="false"></textarea>
     <div class="hint">One per line: a 16-bit ID like 0x180F, a full 128-bit UUID, or a name like battery_service.</div>
@@ -99,6 +105,8 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
 
   <div class="bar">
     <div id="devname" class="muted">No sensor picked</div>
+    <label for="tag" class="taglabel">Wheel or address of this sensor (added to the log)</label>
+    <input id="tag" autocomplete="off" spellcheck="false" placeholder="e.g. FL BC:6A:29:12:34:56">
     <div class="btns">
       <button id="pick" class="primary">Pick sensor</button>
       <button id="watch" disabled>Watch broadcasts</button>
@@ -156,6 +164,9 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   $("services").value = store.get("services", DEFAULT_SERVICES);
   $("companies").value = store.get("companies", "0x022B");
   ["prefix","services","companies"].forEach(id => $(id).addEventListener("change", e => store.set(id, e.target.value)));
+  $("teslaOnly").checked = store.get("teslaOnly", "1") === "1";
+  $("teslaOnly").addEventListener("change", e => store.set("teslaOnly", e.target.checked ? "1" : "0"));
+  $("tag").addEventListener("change", e => log(`Sensor label set to “${e.target.value.trim()}”`));
 
   const parseServices = txt => txt.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(s => {
     const h = s.toLowerCase().replace(/^0x/, "");
@@ -176,7 +187,8 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   const ts = () => new Date().toISOString().slice(11, 23);
 
   function log(msg, cls){
-    const line = `${ts()}  ${msg}`;
+    const tag = $("tag").value.trim();
+    const line = `${ts()}  ${tag ? "[" + tag + "]  " : ""}${msg}`;
     logRows.push(line);
     if (logRows.length > 2000) logRows.shift();
     const el = $("log");
@@ -223,13 +235,18 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
     if (!optionalServices.includes(TESLA_SVC)) optionalServices.push(TESLA_SVC);
     const opts = { optionalServices };
     if (companies.length) opts.optionalManufacturerData = companies;
-    if (prefix) opts.filters = [{ namePrefix: prefix }]; else opts.acceptAllDevices = true;
+    const teslaOnly = $("teslaOnly").checked;
+    if (teslaOnly){
+      const f = { manufacturerData: [{ companyIdentifier: 0x022B, dataPrefix: new Uint8Array([0x01, 0xFE, 0x03]) }] };
+      if (prefix) f.namePrefix = prefix;
+      opts.filters = [f];
+    } else if (prefix) opts.filters = [{ namePrefix: prefix }]; else opts.acceptAllDevices = true;
     try {
       const d = await navigator.bluetooth.requestDevice(opts);
       await stopWatch();
       if (device && device.gatt.connected) device.gatt.disconnect();
       device = d;
-      last.clear(); counts.clear();
+      last.clear(); counts.clear(); lastFields.clear(); lastTesla = null;
       $("adv").replaceChildren(emptyEl("Start watching to see broadcasts from this sensor."));
       $("gatt").replaceChildren(emptyEl("Connect to list the sensor’s services and characteristics."));
       device.addEventListener("gattserverdisconnected", () => { log("Disconnected", "muted"); setButtons(); });
@@ -237,9 +254,11 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
       $("devname").className = "";
       $("devname").textContent = device.name ? `Picked: ${device.name}` : "Picked: unnamed device";
       log(`Picked ${device.name || "unnamed device"} (page id ${device.id})`, "ok");
+      if (!$("tag").value.trim()) log("Tip: type this sensor’s wheel or address from the picker into the label field.", "muted");
       $("setup").open = false;
     } catch (e) {
-      if (e.name !== "NotFoundError") log(`Pick failed: ${e.message}`, "err");
+      if (e.name === "TypeError" && $("teslaOnly").checked) log("This Chrome can’t filter by manufacturer data. Untick “Only show Tesla tyre sensors” and pick again.", "err");
+      else if (e.name !== "NotFoundError") log(`Pick failed: ${e.message}`, "err");
     }
     setButtons();
   });
@@ -506,7 +525,8 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
     const blob = new Blob([logRows.join("\n")], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `tpms-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    const tagPart = $("tag").value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+    a.download = `tpms-log-${tagPart ? tagPart + "-" : ""}${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
