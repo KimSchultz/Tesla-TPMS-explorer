@@ -89,7 +89,7 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
       <li>Stand next to one wheel and pick its sensor. Chrome’s picker shows each sensor’s address; original and Autel sensors start with BC:6A:29 or E4:FA:5B, and Service Mode › Chassis › TPMS shows which address sits on which wheel. Type the wheel or address into the label field so the log records which sensor each reading came from.</li>
       <li>Pick one sensor. Its broadcasts only say “I’m here” (Tesla company ID 0x022B, payload 01 FE 03 while parked); the measurements are read over a connection, like the car does.</li>
       <li>Connect, then tap Subscribe on “Tesla tyre data”. The sensor sends pressure and temperature straight away, then a heartbeat every four minutes while it stands still. It accepts one connection at a time, so this only works while the car isn’t connected to it, and the car can’t hear it until you disconnect.</li>
-      <li>Battery level hasn’t been confirmed in the sensor’s data. Each message lists every field it contains; a value that barely changes and differs slightly between your four sensors is the one to look at.</li>
+      <li>Tesla’s protocol has a battery voltage field, but it hasn’t been seen from a sensor yet; it probably only comes while the sensor is awake from driving. Each message lists every field it contains, named where Tesla’s protocol has a name. Untick “Only show Tesla tyre sensors” right after a drive to find an awake sensor.</li>
     </ol>
     <label for="prefix">Name starts with (optional)</label>
     <input id="prefix" autocomplete="off" spellcheck="false" placeholder="Leave empty to list every device">
@@ -131,6 +131,109 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   <pre id="log"></pre>
 </main>
 
+<script id="tpms-decoder">
+// Tesla TPMS wheel unit decoder. Identical copy in index.html and explorer.html; tests/decoder.test.js checks both.
+// Field numbers: trifinite/vcsec-archive protos/VCSECv4.20.69.proto. Messages are not size-prefixed; field 2 is UnsignedMessage.
+const TPMS = (() => {
+  const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
+  const ascii = b => Array.from(b, x => (x >= 32 && x < 127) ? String.fromCharCode(x) : ".").join("");
+  function readVarint(b, p){
+    let x = 0n, shift = 0n;
+    while (p < b.length){ const c = b[p++]; x |= BigInt(c & 0x7f) << shift; if (!(c & 0x80)) return [x, p]; shift += 7n; }
+    throw new Error("truncated varint");
+  }
+  function parsePB(b){
+    const out = {}; let p = 0;
+    while (p < b.length){
+      let key; [key, p] = readVarint(b, p);
+      const field = Number(key >> 3n), wt = Number(key & 7n); let v;
+      if (field === 0) throw new Error("field 0");
+      if (wt === 0) [v, p] = readVarint(b, p);
+      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
+      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated fixed32"); v = b.slice(p, p + 4); p += 4; }
+      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated fixed64"); v = b.slice(p, p + 8); p += 8; }
+      else throw new Error("wire type " + wt);
+      (out[field] ||= []).push({ wt, v });
+    }
+    return out;
+  }
+
+  const NOTIFY = ["unknown", "low pressure", "pressure/temperature update", "wheel moving", "rotation direction ready", "LF", "fault"];
+  const LR = ["error: max count", "error: negative period", "error: long period", "left", "right"];
+  const ACTIVITY = ["none", "stationary", "motion", "significant motion"];
+  // UnsignedMessage field: [kind, { field: [name, type, enum] }]. Types: i int32, s sint32, u uint32, b bool, x bytes, e enum.
+  const MSG = {
+    5: ["adv", { 1: ["pressureKpa", "i"], 2: ["tempC", "s"], 3: ["notifyReason", "e", NOTIFY], 4: ["batteryMv", "u"], 5: ["advCount", "u"], 6: ["advType", "u"] }],
+    27: ["sleepStats", { 1: ["totalCpuTime", "u"], 2: ["totalAwakeTime", "u"], 3: ["bleTrimApplied", "u"] }],
+    28: ["data", { 1: ["pressureKpa", "i"], 2: ["tempC", "s"] }],
+    29: ["info", { 1: ["tiAppCrc", "x"], 2: ["mlxAppCrc", "x"], 3: ["batteryMv", "u"] }],
+    30: ["resetStats", { 1: ["powerOn", "u"], 2: ["pinReset", "u"], 3: ["vddsLoss", "u"], 4: ["vddLoss", "u"], 5: ["vddrLoss", "u"], 6: ["clockLoss", "u"], 7: ["systemReset", "u"], 8: ["warmReset", "u"], 9: ["wakeFromShutdown", "u"], 10: ["wakeFromTckNoise", "u"] }],
+    31: ["notifyStats", { 1: ["unknown", "u"], 2: ["lowPressure", "u"], 3: ["ptUpdate", "u"], 4: ["wheelMoving", "u"], 5: ["rotationReady", "u"], 6: ["lf", "u"], 7: ["fault", "u"] }],
+    33: ["rotation", { 1: ["result", "e", LR], 2: ["periodMs", "u"], 3: ["count90", "u"], 4: ["count270", "u"], 5: ["zAccelDg", "s"], 6: ["zAccelDiffCount", "u"] }],
+    34: ["heartbeat", { 1: ["good", "u"], 2: ["missed", "u"], 3: ["badCrc", "u"] }],
+    44: ["accel", { 1: ["xAccelG", "i"], 2: ["zAccelG", "i"] }],
+    45: ["alarms", { 1: ["pressure", "b"], 2: ["temperature", "b"], 3: ["acceleration", "b"], 4: ["voltage", "b"], 5: ["lfDetect", "b"], 6: ["wheelMotion", "b"] }]
+  };
+  // Path -> [name, type, enum] for the field dump. 2.35 is an enum directly in UnsignedMessage.
+  const NAMES = { "2": ["unsignedMessage"], "2.35": ["activity", "e", ACTIVITY] };
+  for (const f in MSG){ const [kind, fs] = MSG[f]; NAMES["2." + f] = [kind]; for (const k in fs) NAMES[`2.${f}.${k}`] = [`${kind}.${fs[k][0]}`, fs[k][1], fs[k][2]]; }
+
+  // proto3: a missing scalar means its default (0, false, first enum value).
+  function value(e, type, en){
+    if (type === "x") return e && e.wt === 2 ? hex(e.v) : "";
+    const v = e && e.wt === 0 ? e.v : 0n;
+    if (type === "b") return v !== 0n;
+    const n = type === "s" ? Number(BigInt.asIntN(32, (v >> 1n) ^ -(v & 1n))) : type === "i" ? Number(BigInt.asIntN(32, v)) : Number(BigInt.asUintN(32, v));
+    return type === "e" ? (en[n] || `unknown ${n}`) : n;
+  }
+  const sub = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
+
+  // One message -> { kind, ...named fields }, plus gauge/bar/psi only when a pressure was actually sent (a TPAdv may carry just battery). null if it isn't a wheel unit message.
+  function decode(bytes){
+    try {
+      const um = sub(parsePB(bytes), 2); if (!um) return null;
+      if (um[35]) return { kind: "activity", activity: value(um[35][0], "e", ACTIVITY) };
+      for (const f in MSG){
+        const m = sub(um, f); if (!m) continue;
+        const [kind, fs] = MSG[f], d = { kind };
+        for (const k in fs) d[fs[k][0]] = value(m[k] && m[k][0], fs[k][1], fs[k][2]);
+        if ("pressureKpa" in d && m[1]){ d.gauge = Math.max(0, d.pressureKpa - 101.325); d.bar = d.gauge / 100; d.psi = d.gauge * 0.1450377; }
+        return d;
+      }
+      return { kind: "other" };
+    } catch { return null; }
+  }
+
+  // Every field, depth first: { path, raw, name?, value? }. name/value only for fields in the proto. null if not protobuf.
+  function fields(bytes){ const out = []; return walk(bytes, "", out, 0) ? out : null; }
+  function walk(bytes, prefix, out, depth){
+    let m; try { m = parsePB(bytes); } catch { return false; }
+    for (const f of Object.keys(m).map(Number).sort((a, b) => a - b)){
+      m[f].forEach((e, i) => {
+        const path = prefix + f + (m[f].length > 1 ? `[${i}]` : "");
+        const [name, type, en] = NAMES[path.replace(/\[\d+\]/g, "")] || [];
+        const row = { path };
+        if (name) row.name = name;
+        if (e.wt === 0) row.raw = `varint ${e.v} (zigzag ${(e.v >> 1n) ^ -(e.v & 1n)})`;
+        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); row.raw = `fixed32 ${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(6)})`; }
+        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); row.raw = `fixed64 ${dv.getBigUint64(0, true)} (double ${dv.getFloat64(0, true).toPrecision(8)})`; }
+        else {
+          const start = out.length;
+          out.push({ ...row, raw: `message, ${e.v.length} bytes` });
+          if (depth < 6 && type !== "x" && e.v.length && walk(e.v, path + ".", out, depth + 1)) return;
+          out.length = start;
+          row.raw = `bytes [${hex(e.v)}] "${ascii(e.v)}"`;
+        }
+        if (type) row.value = value(e, type, en);
+        out.push(row);
+      });
+    }
+    return true;
+  }
+
+  return { hex, ascii, decode, fields };
+})();
+</script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -180,8 +283,7 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
 
   // ---------- helpers ----------
   const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
-  const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
-  const ascii = b => Array.from(b, x => (x >= 32 && x < 127) ? String.fromCharCode(x) : ".").join("");
+  const { hex, ascii } = TPMS;
   const short = u => { const m = /^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/.exec(u); return m ? "0x" + m[1].toUpperCase() : u; };
   const label = u => NAMES[u] ? `${NAMES[u]} (${short(u)})` : short(u);
   const ts = () => new Date().toISOString().slice(11, 23);
@@ -395,96 +497,47 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   }
 
 
-  // ---------- Tesla VCSEC decoding (FromTPWheelUnitMessage, not size-prefixed) ----------
-  function readVarint(b, p){
-    let x = 0n, shift = 0n;
-    while (p < b.length){ const c = b[p++]; x |= BigInt(c & 0x7f) << shift; if (!(c & 0x80)) return [x, p]; shift += 7n; }
-    throw new Error("truncated varint");
-  }
-  function parsePB(b){
-    const out = {}; let p = 0;
-    while (p < b.length){
-      let key; [key, p] = readVarint(b, p);
-      const field = Number(key >> 3n), wt = Number(key & 7n); let v;
-      if (field === 0) throw new Error("field 0");
-      if (wt === 0) [v, p] = readVarint(b, p);
-      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
-      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated fixed32"); v = b.slice(p, p + 4); p += 4; }
-      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated fixed64"); v = b.slice(p, p + 8); p += 8; }
-      else throw new Error("wire type " + wt);
-      (out[field] ||= []).push({ wt, v });
-    }
-    return out;
-  }
-  const sub = (m, f) => { const e = m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
-  const num = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 0 ? e.v : 0n; };
-  function decodeTesla(bytes){
-    try {
-      const um = sub(parsePB(bytes), 2); if (!um) return null;
-      const tp = sub(um, 28);
-      if (tp){
-        const abs = Number(num(tp, 1));
-        const t = num(tp, 2), temp = Number((t >> 1n) ^ -(t & 1n));
-        const gauge = Math.max(0, abs - 101.325);
-        return { kind: "data", abs, gauge, bar: gauge / 100, psi: gauge * 0.1450377, temp };
-      }
-      const cm = sub(um, 34);
-      if (cm) return { kind: "heartbeat", good: Number(num(cm, 1)), missed: Number(num(cm, 2)), badCrc: Number(num(cm, 3)) };
-      return { kind: "other" };
-    } catch { return null; }
-  }
+  // ---------- Tesla messages (decoder is the shared tpms-decoder block above) ----------
   let lastTesla = null;
   const lastFields = new Map();
-  function dumpPB(bytes, prefix, out, depth){
-    let m; try { m = parsePB(bytes); } catch { return false; }
-    for (const f of Object.keys(m).map(Number).sort((a, b) => a - b)){
-      m[f].forEach((e, i) => {
-        const path = prefix + f + (m[f].length > 1 ? `[${i}]` : "");
-        if (e.wt === 0){ const s = (e.v >> 1n) ^ -(e.v & 1n); out.push({ path, text: `varint ${e.v} (zigzag ${s})` }); }
-        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); out.push({ path, text: `fixed32 ${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(6)})` }); }
-        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); out.push({ path, text: `fixed64 ${dv.getBigUint64(0, true)} (double ${dv.getFloat64(0, true).toPrecision(8)})` }); }
-        else {
-          const start = out.length;
-          out.push({ path, text: `message, ${e.v.length} bytes` });
-          if (!(depth < 6 && e.v.length && dumpPB(e.v, path + ".", out, depth + 1))){
-            out.length = start;
-            out.push({ path, text: `bytes [${hex(e.v)}] "${ascii(e.v)}"` });
-          }
-        }
-      });
-    }
-    return true;
-  }
   function renderFields(el, bytes){
-    const out = [];
-    if (!dumpPB(bytes, "", out, 0)) return;
+    const out = TPMS.fields(bytes);
+    if (!out) return;
     const box = document.createElement("div"); box.className = "fields";
     const t = document.createElement("div"); t.className = "muted";
-    t.textContent = "Every field in this message. Paths are protobuf field numbers; highlighted lines changed since the last message.";
+    t.textContent = "Every field in this message. Paths are protobuf field numbers, names come from Tesla’s proto; highlighted lines changed since the last message.";
     box.appendChild(t);
+    const text = r => r.name ? `${r.name} ${"value" in r ? r.value + "   (" + r.raw + ")" : r.raw}` : r.raw;
     for (const r of out){
       const line = document.createElement("div"); line.className = "mono";
       const prev = lastFields.get(r.path);
-      if (prev !== undefined && prev !== r.text) line.classList.add("chgline");
-      lastFields.set(r.path, r.text);
-      line.textContent = `${r.path}  ${r.text}`;
+      if (prev !== undefined && prev !== r.raw) line.classList.add("chgline");
+      lastFields.set(r.path, r.raw);
+      line.textContent = `${r.path}  ${text(r)}`;
       box.appendChild(line);
     }
     el.appendChild(box);
-    log("Fields: " + out.map(r => `${r.path}=${r.text}`).join("  |  "));
+    log("Fields: " + out.map(r => `${r.path}=${text(r)}`).join("  |  "));
   }
   function showTesla(el, d){
     const b = document.createElement("div"); b.className = "reading";
-    if (d.kind === "data"){
+    const rest = Object.entries(d).filter(([k]) => !["kind", "pressureKpa", "tempC", "gauge", "bar", "psi"].includes(k)).map(([k, v]) => `${k} ${v}`).join(", ");
+    if ("bar" in d){
       lastTesla = d;
-      b.textContent = `${d.bar.toFixed(2)} bar (${d.psi.toFixed(1)} psi), ${d.temp} °C`;
-      log(`Tyre: ${d.bar.toFixed(2)} bar gauge, ${d.abs} kPa absolute, ${d.temp} °C`, "ok");
+      b.textContent = `${d.bar.toFixed(2)} bar (${d.psi.toFixed(1)} psi), ${d.tempC} °C`;
+      log(`Tyre (${d.kind}): ${d.bar.toFixed(2)} bar gauge, ${d.pressureKpa} kPa absolute, ${d.tempC} °C${rest ? ", " + rest : ""}`, "ok");
     } else if (d.kind === "heartbeat"){
-      b.textContent = lastTesla ? `${lastTesla.bar.toFixed(2)} bar, ${lastTesla.temp} °C (unchanged, heartbeat)` : "Heartbeat, no reading yet";
+      b.textContent = lastTesla ? `${lastTesla.bar.toFixed(2)} bar, ${lastTesla.tempC} °C (unchanged, heartbeat)` : "Heartbeat, no reading yet";
       log(`Heartbeat: ${d.good} good, ${d.missed} missed, ${d.badCrc} bad CRC connection events`);
-    } else b.textContent = "Message without tyre data";
+    } else if (d.kind === "other") b.textContent = "Message without tyre data";
+    else { b.textContent = `${d.kind}: ${rest}`; log(`${d.kind}: ${rest}`, "ok"); }
     el.appendChild(b);
-    if (d.kind === "data" && d.temp === 29) {
+    if (d.batteryMv){
+      const v = document.createElement("div"); v.className = "reading";
+      v.textContent = `Battery ${(d.batteryMv / 1000).toFixed(3)} V`;
+      el.appendChild(v);
+    }
+    if ("bar" in d && d.tempC === 29) {
       const w = document.createElement("div"); w.className = "muted";
       w.textContent = "29 °C is the fixed value some clone sensors report. If it never changes, the temperature isn’t real.";
       el.appendChild(w);
@@ -492,7 +545,7 @@ pre#log{background:var(--surface);border:1px solid var(--line);border-radius:6px
   }
   function showValue(el, uuid, bytes, prev){
     el.replaceChildren();
-    if (uuid === TESLA_IND){ const d = decodeTesla(bytes); if (d) showTesla(el, d); renderFields(el, bytes); }
+    if (uuid === TESLA_IND){ const d = TPMS.decode(bytes); if (d) showTesla(el, d); renderFields(el, bytes); }
     const key = uuid.slice(0, 8);
     if (key === "00002a19" && bytes.length){
       const b = document.createElement("div"); b.innerHTML = "<b></b>"; b.firstChild.textContent = `Battery ${bytes[0]} %`; el.appendChild(b);

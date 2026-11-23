@@ -43,8 +43,10 @@ p{margin:0 0 12px}
 .state.ok{color:var(--ok)}
 .extra{font-size:.8rem;background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:4px 6px;margin-top:6px;word-break:break-all}
 .note{font-size:.8rem;color:var(--muted);margin-top:4px}
+.note.err{color:var(--warn)}
 button{font:500 15px/1 Barlow,system-ui,sans-serif;min-height:44px;padding:0 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;width:100%}
+button.wide{width:100%;margin-top:6px}
 .spacer{flex:1 1 auto;min-height:10px}
 button.link{min-height:36px;border:0;background:none;color:var(--muted);text-decoration:underline;padding:0;font-size:.85rem;align-self:flex-start}
 button:disabled{opacity:.45;cursor:default}
@@ -87,7 +89,8 @@ a{color:inherit}
       <li>The picker only lists Tesla tyre sensors that are parked and not connected to the car. If the car is awake and connected to a sensor, lock it and walk away for a minute.</li>
       <li>The picker shows each sensor’s address. Service Mode › Chassis › TPMS on the car shows which address is on which wheel.</li>
       <li>If a wheel’s sensor never appears in the list, tap “Not in list” on that wheel. That’s the usual sign of a dead sensor battery.</li>
-      <li>Battery level isn’t known to be sent by the sensor. If a sensor sends anything beyond pressure and temperature, it shows up highlighted as extra data.</li>
+      <li>Battery voltage seems to come only from sensors that are awake. Right after a drive, use “Read after driving”: it lists everything with Tesla’s ID (the car too, so pick the sensor’s address) and listens for 45 seconds. A battery voltage shows on the wheel when one arrives.</li>
+      <li>If a sensor sends anything beyond pressure, temperature and battery, it shows up highlighted as extra data, named where Tesla’s protocol has a name for it.</li>
       <li>Some clone sensors always report 29 °C. If a wheel never changes from 29 °C, the temperature isn’t real.</li>
       <li>Readings stay in this browser on this phone. Clearing Chrome’s site data deletes them, so download a copy if you want to keep it.</li>
       <li>Need raw services and broadcasts? Use the <a href="explorer.html">advanced explorer</a>.</li>
@@ -95,33 +98,12 @@ a{color:inherit}
   </details>
 </main>
 
-<script>
-(() => {
-  const $ = id => document.getElementById(id);
-  const TESLA_SVC = "00000211-b2d1-43f0-9b88-960cebf8b91e";
-  const TESLA_IND = "00000213-b2d1-43f0-9b88-960cebf8b91e";
-  const TESLA_CO = 0x022B;
-  const WHEELS = [["FL", "Front left"], ["FR", "Front right"], ["RL", "Rear left"], ["RR", "Rear right"]];
-  const wheelName = w => (WHEELS.find(x => x[0] === w) || [w, w])[1];
-  const KEY = "tesla-tpms:readings:v1";
-  const KNOWN = new Set(["2", "2.28", "2.28.1", "2.28.2", "2.34", "2.34.1", "2.34.2", "2.34.3"]);
-  let busy = false;
-
-  // ---------- storage ----------
-  let readings = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })();
-  function save(){
-    try { localStorage.setItem(KEY, JSON.stringify(readings.slice(-1000))); }
-    catch (e) { status(`Couldn’t save on this phone: ${e.message}. Download a copy instead.`, "err"); }
-  }
-
-  // ---------- helpers ----------
+<script id="tpms-decoder">
+// Tesla TPMS wheel unit decoder. Identical copy in index.html and explorer.html; tests/decoder.test.js checks both.
+// Field numbers: trifinite/vcsec-archive protos/VCSECv4.20.69.proto. Messages are not size-prefixed; field 2 is UnsignedMessage.
+const TPMS = (() => {
   const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
-  const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
-  const fmtTime = iso => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  function status(msg, cls){ const s = $("status"); s.className = cls || ""; s.textContent = msg; }
-  function withTimeout(p, ms, msg){ let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg)), ms); })]).finally(() => clearTimeout(t)); }
-
-  // ---------- protobuf (Tesla VCSEC FromTPWheelUnitMessage, not size-prefixed) ----------
+  const ascii = b => Array.from(b, x => (x >= 32 && x < 127) ? String.fromCharCode(x) : ".").join("");
   function readVarint(b, p){
     let x = 0n, shift = 0n;
     while (p < b.length){ const c = b[p++]; x |= BigInt(c & 0x7f) << shift; if (!(c & 0x80)) return [x, p]; shift += 7n; }
@@ -134,58 +116,136 @@ a{color:inherit}
       const field = Number(key >> 3n), wt = Number(key & 7n); let v;
       if (field === 0) throw new Error("field 0");
       if (wt === 0) [v, p] = readVarint(b, p);
-      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated"); v = b.slice(p, p + len); p += len; }
-      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated"); v = b.slice(p, p + 4); p += 4; }
-      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated"); v = b.slice(p, p + 8); p += 8; }
+      else if (wt === 2){ let len; [len, p] = readVarint(b, p); len = Number(len); if (p + len > b.length) throw new Error("truncated field"); v = b.slice(p, p + len); p += len; }
+      else if (wt === 5){ if (p + 4 > b.length) throw new Error("truncated fixed32"); v = b.slice(p, p + 4); p += 4; }
+      else if (wt === 1){ if (p + 8 > b.length) throw new Error("truncated fixed64"); v = b.slice(p, p + 8); p += 8; }
       else throw new Error("wire type " + wt);
       (out[field] ||= []).push({ wt, v });
     }
     return out;
   }
+
+  const NOTIFY = ["unknown", "low pressure", "pressure/temperature update", "wheel moving", "rotation direction ready", "LF", "fault"];
+  const LR = ["error: max count", "error: negative period", "error: long period", "left", "right"];
+  const ACTIVITY = ["none", "stationary", "motion", "significant motion"];
+  // UnsignedMessage field: [kind, { field: [name, type, enum] }]. Types: i int32, s sint32, u uint32, b bool, x bytes, e enum.
+  const MSG = {
+    5: ["adv", { 1: ["pressureKpa", "i"], 2: ["tempC", "s"], 3: ["notifyReason", "e", NOTIFY], 4: ["batteryMv", "u"], 5: ["advCount", "u"], 6: ["advType", "u"] }],
+    27: ["sleepStats", { 1: ["totalCpuTime", "u"], 2: ["totalAwakeTime", "u"], 3: ["bleTrimApplied", "u"] }],
+    28: ["data", { 1: ["pressureKpa", "i"], 2: ["tempC", "s"] }],
+    29: ["info", { 1: ["tiAppCrc", "x"], 2: ["mlxAppCrc", "x"], 3: ["batteryMv", "u"] }],
+    30: ["resetStats", { 1: ["powerOn", "u"], 2: ["pinReset", "u"], 3: ["vddsLoss", "u"], 4: ["vddLoss", "u"], 5: ["vddrLoss", "u"], 6: ["clockLoss", "u"], 7: ["systemReset", "u"], 8: ["warmReset", "u"], 9: ["wakeFromShutdown", "u"], 10: ["wakeFromTckNoise", "u"] }],
+    31: ["notifyStats", { 1: ["unknown", "u"], 2: ["lowPressure", "u"], 3: ["ptUpdate", "u"], 4: ["wheelMoving", "u"], 5: ["rotationReady", "u"], 6: ["lf", "u"], 7: ["fault", "u"] }],
+    33: ["rotation", { 1: ["result", "e", LR], 2: ["periodMs", "u"], 3: ["count90", "u"], 4: ["count270", "u"], 5: ["zAccelDg", "s"], 6: ["zAccelDiffCount", "u"] }],
+    34: ["heartbeat", { 1: ["good", "u"], 2: ["missed", "u"], 3: ["badCrc", "u"] }],
+    44: ["accel", { 1: ["xAccelG", "i"], 2: ["zAccelG", "i"] }],
+    45: ["alarms", { 1: ["pressure", "b"], 2: ["temperature", "b"], 3: ["acceleration", "b"], 4: ["voltage", "b"], 5: ["lfDetect", "b"], 6: ["wheelMotion", "b"] }]
+  };
+  // Path -> [name, type, enum] for the field dump. 2.35 is an enum directly in UnsignedMessage.
+  const NAMES = { "2": ["unsignedMessage"], "2.35": ["activity", "e", ACTIVITY] };
+  for (const f in MSG){ const [kind, fs] = MSG[f]; NAMES["2." + f] = [kind]; for (const k in fs) NAMES[`2.${f}.${k}`] = [`${kind}.${fs[k][0]}`, fs[k][1], fs[k][2]]; }
+
+  // proto3: a missing scalar means its default (0, false, first enum value).
+  function value(e, type, en){
+    if (type === "x") return e && e.wt === 2 ? hex(e.v) : "";
+    const v = e && e.wt === 0 ? e.v : 0n;
+    if (type === "b") return v !== 0n;
+    const n = type === "s" ? Number(BigInt.asIntN(32, (v >> 1n) ^ -(v & 1n))) : type === "i" ? Number(BigInt.asIntN(32, v)) : Number(BigInt.asUintN(32, v));
+    return type === "e" ? (en[n] || `unknown ${n}`) : n;
+  }
   const sub = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 2 ? parsePB(e.v) : null; };
-  const num = (m, f) => { const e = m && m[f] && m[f][0]; return e && e.wt === 0 ? e.v : 0n; };
-  function decodeTesla(bytes){
+
+  // One message -> { kind, ...named fields }, plus gauge/bar/psi only when a pressure was actually sent (a TPAdv may carry just battery). null if it isn't a wheel unit message.
+  function decode(bytes){
     try {
       const um = sub(parsePB(bytes), 2); if (!um) return null;
-      const tp = sub(um, 28);
-      if (!tp) return { kind: sub(um, 34) ? "heartbeat" : "other" };
-      const abs = Number(num(tp, 1)), t = num(tp, 2);
-      const temp = Number((t >> 1n) ^ -(t & 1n));
-      const gauge = Math.max(0, abs - 101.325);
-      return { kind: "data", abs, gauge, bar: gauge / 100, psi: gauge * 0.1450377, temp };
+      if (um[35]) return { kind: "activity", activity: value(um[35][0], "e", ACTIVITY) };
+      for (const f in MSG){
+        const m = sub(um, f); if (!m) continue;
+        const [kind, fs] = MSG[f], d = { kind };
+        for (const k in fs) d[fs[k][0]] = value(m[k] && m[k][0], fs[k][1], fs[k][2]);
+        if ("pressureKpa" in d && m[1]){ d.gauge = Math.max(0, d.pressureKpa - 101.325); d.bar = d.gauge / 100; d.psi = d.gauge * 0.1450377; }
+        return d;
+      }
+      return { kind: "other" };
     } catch { return null; }
   }
-  function dumpPB(bytes, prefix, out, depth){
+
+  // Every field, depth first: { path, raw, name?, value? }. name/value only for fields in the proto. null if not protobuf.
+  function fields(bytes){ const out = []; return walk(bytes, "", out, 0) ? out : null; }
+  function walk(bytes, prefix, out, depth){
     let m; try { m = parsePB(bytes); } catch { return false; }
     for (const f of Object.keys(m).map(Number).sort((a, b) => a - b)){
       m[f].forEach((e, i) => {
         const path = prefix + f + (m[f].length > 1 ? `[${i}]` : "");
-        if (e.wt === 0){ const s = (e.v >> 1n) ^ -(e.v & 1n); out.push({ path, text: `${e.v} (signed ${s})` }); }
-        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); out.push({ path, text: `${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(5)})` }); }
-        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); out.push({ path, text: `${dv.getBigUint64(0, true)}` }); }
+        const [name, type, en] = NAMES[path.replace(/\[\d+\]/g, "")] || [];
+        const row = { path };
+        if (name) row.name = name;
+        if (e.wt === 0) row.raw = `varint ${e.v} (zigzag ${(e.v >> 1n) ^ -(e.v & 1n)})`;
+        else if (e.wt === 5){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 4); row.raw = `fixed32 ${dv.getUint32(0, true)} (float ${dv.getFloat32(0, true).toPrecision(6)})`; }
+        else if (e.wt === 1){ const dv = new DataView(e.v.buffer, e.v.byteOffset, 8); row.raw = `fixed64 ${dv.getBigUint64(0, true)} (double ${dv.getFloat64(0, true).toPrecision(8)})`; }
         else {
           const start = out.length;
-          out.push({ path, text: `message ${e.v.length} B` });
-          if (!(depth < 6 && e.v.length && dumpPB(e.v, path + ".", out, depth + 1))){ out.length = start; out.push({ path, text: `[${hex(e.v)}]` }); }
+          out.push({ ...row, raw: `message, ${e.v.length} bytes` });
+          if (depth < 6 && type !== "x" && e.v.length && walk(e.v, path + ".", out, depth + 1)) return;
+          out.length = start;
+          row.raw = `bytes [${hex(e.v)}] "${ascii(e.v)}"`;
         }
+        if (type) row.value = value(e, type, en);
+        out.push(row);
       });
     }
     return true;
   }
 
+  return { hex, ascii, decode, fields };
+})();
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const TESLA_SVC = "00000211-b2d1-43f0-9b88-960cebf8b91e";
+  const TESLA_IND = "00000213-b2d1-43f0-9b88-960cebf8b91e";
+  const TESLA_CO = 0x022B;
+  const WHEELS = [["FL", "Front left"], ["FR", "Front right"], ["RL", "Rear left"], ["RR", "Rear right"]];
+  const wheelName = w => (WHEELS.find(x => x[0] === w) || [w, w])[1];
+  const KEY = "tesla-tpms:readings:v1";
+  // Fields already shown on the card (pressure, temperature, battery) or routine (heartbeat counters); everything else is "extra".
+  const SHOWN = new Set(["2.28.1", "2.28.2", "2.5.1", "2.5.2", "2.34.1", "2.34.2", "2.34.3", "2.5.4", "2.29.3"]);
+  const LOW_MV = 2600; // ponytail: guess. New sensors read ~3000 mV (Tireless); tune once real readings come in.
+  const isReading = d => !!d && "bar" in d;
+  const volts = mv => `${(mv / 1000).toFixed(2)} V`;
+  let busy = false;
+
+  // ---------- storage ----------
+  let readings = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })();
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(readings.slice(-1000))); }
+    catch (e) { status(`Couldn’t save on this phone: ${e.message}. Download a copy instead.`, "err"); }
+  }
+
+  // ---------- helpers ----------
+  const hex = TPMS.hex;
+  const bytesOf = dv => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
+  const fmtTime = iso => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  function status(msg, cls){ const s = $("status"); s.className = cls || ""; s.textContent = msg; }
+  function withTimeout(p, ms, msg){ let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg)), ms); })]).finally(() => clearTimeout(t)); }
+
   // ---------- Bluetooth ----------
-  async function pick(){
+  // Parked: only sensors sending the parked frame 01 FE 03. Driven: anything with Tesla's company ID, since awake sensors may advertise differently (the car shows up too).
+  async function pick(driven){
     const base = { optionalServices: [TESLA_SVC], optionalManufacturerData: [TESLA_CO] };
+    const md = driven ? { companyIdentifier: TESLA_CO } : { companyIdentifier: TESLA_CO, dataPrefix: new Uint8Array([0x01, 0xFE, 0x03]) };
     try {
-      return await navigator.bluetooth.requestDevice({ ...base, filters: [{ manufacturerData: [{ companyIdentifier: TESLA_CO, dataPrefix: new Uint8Array([0x01, 0xFE, 0x03]) }] }] });
+      return await navigator.bluetooth.requestDevice({ ...base, filters: [{ manufacturerData: [md] }] });
     } catch (e) {
       if (e.name !== "TypeError") throw e;
       return await navigator.bluetooth.requestDevice({ ...base, acceptAllDevices: true }); // older Chrome: no manufacturer-data filter
     }
   }
 
-  // Subscribes to the sensor's indications and returns every message received. Stops 2 s after the first tyre reading, or after `ms`.
-  function collect(ch, ms){
+  // Subscribes to the sensor's indications and returns every message received. Stops after `ms`, or 2 s after the first tyre reading unless `full`.
+  function collect(ch, ms, full){
     return new Promise((resolve, reject) => {
       const msgs = []; let after = null;
       const finish = () => {
@@ -196,8 +256,7 @@ a{color:inherit}
       };
       const onValue = e => {
         const b = bytesOf(e.target.value); msgs.push(b);
-        const d = decodeTesla(b);
-        if (d && d.kind === "data" && !after) after = setTimeout(finish, 2000);
+        if (!full && isReading(TPMS.decode(b)) && !after) after = setTimeout(finish, 2000);
       };
       const overall = setTimeout(finish, ms);
       ch.addEventListener("characteristicvaluechanged", onValue);
@@ -205,34 +264,42 @@ a{color:inherit}
     });
   }
 
-  async function readWheel(w){
+  async function readWheel(w, driven){
     if (busy) return;
     busy = true; render();
-    status(`Pick the sensor at the ${wheelName(w).toLowerCase()} wheel.`);
+    const where = wheelName(w).toLowerCase(), secs = driven ? 45 : 15;
+    status(driven
+      ? `Pick the sensor at the ${where} wheel. Its address starts with BC:6A:29 or E4:FA:5B; the list can also show the car.`
+      : `Pick the sensor at the ${where} wheel.`);
     let device;
-    try { device = await pick(); }
+    try { device = await pick(driven); }
     catch (e) {
       busy = false; render();
       if (e.name === "NotFoundError") status(`Nothing picked. If the ${wheelName(w).toLowerCase()} sensor wasn’t in the list, tap “Not in list” on that wheel.`);
       else status(`Couldn’t open the picker: ${e.message}`, "err");
       return;
     }
-    const rec = { wheel: w, time: new Date().toISOString(), ok: false, device: device.name || null };
+    const rec = { wheel: w, time: new Date().toISOString(), mode: driven ? "driven" : "parked", ok: false, device: device.name || null };
     try {
-      status(`Connecting to the ${wheelName(w).toLowerCase()} sensor…`);
+      status(`Connecting to the ${where} sensor…`);
       const server = await withTimeout(device.gatt.connect(), 12000, "The sensor didn’t accept a connection. The car may be connected to it; lock the car, walk away for a minute and try again.");
       const svc = await withTimeout(server.getPrimaryService(TESLA_SVC), 8000, "This device doesn’t have the Tesla sensor service. Was the right device picked?");
       const ch = await svc.getCharacteristic(TESLA_IND);
-      status(`Reading the ${wheelName(w).toLowerCase()} sensor…`);
-      const msgs = await collect(ch, 15000);
+      status(driven ? `Listening to the ${where} sensor for ${secs} seconds…` : `Reading the ${where} sensor…`);
+      const msgs = await collect(ch, secs * 1000, driven);
+      const decoded = msgs.map(TPMS.decode);
       rec.messages = msgs.map(hex);
-      const data = msgs.map(decodeTesla).find(d => d && d.kind === "data");
-      if (!data) throw new Error("Connected, but the sensor sent no tyre data within 15 seconds. Try again.");
-      Object.assign(rec, { ok: true, absKpa: data.abs, bar: +data.bar.toFixed(2), psi: +data.psi.toFixed(1), tempC: data.temp });
-      const extra = new Map();
-      for (const m of msgs){ const out = []; dumpPB(m, "", out, 0); out.filter(f => !KNOWN.has(f.path)).forEach(f => extra.set(f.path, f.text)); }
-      rec.extra = Array.from(extra, ([p, t]) => `${p} = ${t}`);
-      status(`${wheelName(w)}: ${rec.bar.toFixed(2)} bar, ${rec.tempC} °C. Saved.`, "ok");
+      const batt = decoded.filter(d => d && d.batteryMv).pop();
+      if (batt) rec.batteryMv = batt.batteryMv;
+      const extra = new Map(); // path -> text, last message wins
+      for (const m of msgs) for (const r of TPMS.fields(m) || []){
+        if (!r.raw.startsWith("message") && !SHOWN.has(r.path)) extra.set(r.path, "value" in r ? `${r.name} = ${r.value}` : `${r.name || r.path} = ${r.raw}`);
+      }
+      rec.extra = [...extra.values()];
+      const data = decoded.filter(isReading).pop();
+      if (!data) throw new Error(`Connected, but the sensor sent no tyre data within ${secs} seconds${msgs.length ? ` (${msgs.length} other messages, saved)` : ""}. Try again.`);
+      Object.assign(rec, { ok: true, absKpa: data.pressureKpa, bar: +data.bar.toFixed(2), psi: +data.psi.toFixed(1), tempC: data.tempC });
+      status(`${wheelName(w)}: ${rec.bar.toFixed(2)} bar, ${rec.tempC} °C${rec.batteryMv ? `, battery ${(rec.batteryMv / 1000).toFixed(2)} V` : ""}. Saved.`, "ok");
     } catch (e) {
       rec.error = e.message;
       status(e.message, "err");
@@ -261,8 +328,10 @@ a{color:inherit}
       const card = el("section", "wheel");
       card.append(el("h3", null, wheelName(w)));
       card.append(el("div", "big" + (lastOk ? "" : " none"), lastOk ? `${lastOk.bar.toFixed(2)} bar` : "–"));
+      const batt = [...mine].reverse().find(r => r.batteryMv);
       const s = el("div", "sub");
       if (lastOk){ s.append(el("span", null, `${lastOk.tempC} °C`), el("span", null, `${lastOk.psi} psi`)); }
+      if (batt) s.append(el("span", null, `Battery ${volts(batt.batteryMv)}`));
       card.append(s);
       let state, cls = "";
       if (!latest) state = "Not read yet";
@@ -270,11 +339,13 @@ a{color:inherit}
       else if (!latest.ok){ state = `Last try failed ${fmtTime(latest.time)}`; cls = "err"; }
       else { state = `Read ${fmtTime(latest.time)}`; cls = "ok"; }
       card.append(el("div", "state " + cls, state));
+      if (batt && batt.batteryMv < LOW_MV) card.append(el("div", "note err", `Battery may be low (under ${volts(LOW_MV)}; new sensors read about 3.0 V).`));
       if (lastOk && lastOk.tempC === 29) card.append(el("div", "note", "29 °C can be a clone’s fixed value."));
       if (lastOk && lastOk.extra && lastOk.extra.length) card.append(el("div", "extra", "Extra data: " + lastOk.extra.join(", ")));
-      const b = el("button", "primary", busy ? "Busy…" : "Read"); b.disabled = busy || !navigator.bluetooth; b.onclick = () => readWheel(w);
+      const b = el("button", "primary", busy ? "Busy…" : "Read"); b.disabled = busy || !navigator.bluetooth; b.onclick = () => readWheel(w, false);
+      const d = el("button", "wide", "Read after driving"); d.disabled = b.disabled; d.onclick = () => readWheel(w, true);
       const m = el("button", "link", "Not in list"); m.disabled = busy; m.onclick = () => markMissing(w);
-      card.append(el("div", "spacer"), b, m);
+      card.append(el("div", "spacer"), b, d, m);
       car.append(card);
     };
     car.append(el("div", "axle", "Front"));
@@ -308,8 +379,8 @@ a{color:inherit}
   const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
   function csvText(){
     const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-    const rows = [["wheel", "time", "result", "bar", "psi", "abs_kpa", "temp_c", "extra", "error"]];
-    readings.forEach(r => rows.push([r.wheel, r.time, r.ok ? "ok" : r.missing ? "not_found" : "failed", r.bar, r.psi, r.absKpa, r.tempC, (r.extra || []).join("; "), r.error]));
+    const rows = [["wheel", "time", "mode", "result", "bar", "psi", "abs_kpa", "temp_c", "battery_mv", "extra", "error"]];
+    readings.forEach(r => rows.push([r.wheel, r.time, r.mode, r.ok ? "ok" : r.missing ? "not_found" : "failed", r.bar, r.psi, r.absKpa, r.tempC, r.batteryMv, (r.extra || []).join("; "), r.error]));
     return rows.map(r => r.map(q).join(",")).join("\n");
   }
   function download(name, text, type){
